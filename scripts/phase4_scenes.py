@@ -68,7 +68,7 @@ def run_correction(pipe, lat, ten, prompt_embeds, layers, weights):
 
 
 def run_style_pin(pipe, lat, ten, prompt_embeds, styled_embeds,
-                   layers, weights, extractor, v_content):
+                   layers, weights, extractor, v_content, v_style):
     """Phase 3: correction + style + pinning."""
     from phase3_prep import run_correction_with_style_and_pinning
 
@@ -77,8 +77,7 @@ def run_style_pin(pipe, lat, ten, prompt_embeds, styled_embeds,
     sched = LambdaScheduler(CORR_LAM, STEPS, "constant")
     corr = FeatureCorrector(pipe.unet, layers, sched, per_layer_weights=weights)
 
-    # Style injector for feature bias
-    v_style = extractor.encode_text(STYLE_PRESETS.get("portraits", ""))
+    # Style injector for feature bias (scene-specific v_style from caller)
     style_inj = StyleFeatureInjector(pipe.unet, layers, v_style, strength=STYLE_STRENGTH)
 
     scheduler = pipe.scheduler
@@ -180,7 +179,7 @@ def process_scene(scene_name, img_dir, pipe, layers, weights, extractor, lpips_f
         t0 = time.perf_counter()
         recon_pin, pin_log = run_style_pin(
             pipe, lat, ten, prompt_embeds, styled_embeds,
-            layers, weights, extractor, v_content)
+            layers, weights, extractor, v_content, v_style)
         sm = compute_metrics(ten, recon_pin, lpips_fn, compute_arcface=is_face)
         st = time.perf_counter() - t0
         sm_delta = sm["PSNR"] - bm["PSNR"]

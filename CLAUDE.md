@@ -319,12 +319,25 @@ $$d_{l+1} \approx (I + \nabla F_l) \cdot \lambda d_l \approx \lambda d_l$$
 
 | 场景 | Baseline PSNR | Correction Δ | Style+Pin Δ | 钉扎触发 |
 |------|-------------|-------------|-------------|---------|
-| 人像 (8张) | 26.38 | **+4.94 dB** | +4.94 dB | 2-9/9 |
-| 建筑 (5张) | 21.22 | **+6.47 dB** | +6.47 dB | 0-8/9 |
-| 艺术字体 (5张) | 22.01 | **+5.16 dB** | +5.16 dB | 2-9/9 |
+| 人像 (8张) | 26.39 | **+4.93 dB** | +4.93 dB | 2-9/9 |
+| 建筑 (5张) | 21.24 | **+6.46 dB** | +6.46 dB | 0-8/9 |
+| 艺术字体 (5张) | 22.03 | **+5.14 dB** | +5.13 dB | 2-9/9 |
+
+**CLIP 风格/内容指标**（`outputs/phase4_sota/scenes/clip_metrics_summary.json`）：
+
+| 场景 | 方法 | CLIP_style | CLIP_content |
+|------|------|-----------|-------------|
+| 人像 | baseline | 0.192 | 0.167 |
+| 人像 | correction | 0.202 | 0.165 |
+| 人像 | style_pin | 0.202 | 0.165 |
+| 建筑 | baseline | 0.172 | 0.169 |
+| 建筑 | style_pin | 0.203 | 0.168 |
+| 字体 | baseline | 0.114 | 0.180 |
+| 字体 | style_pin | 0.167 | 0.169 |
 
 **关键发现**：
 - 校正在三类场景上均稳健有效（平均 +5.5 dB），建筑受益最大（几何结构保持）
+- 风格注入后 CLIP_style 提升（字体 +0.053，建筑 +0.031），同时 CLIP_content 基本不变——验证风格解耦
 - 钉扎在 0-9/9 checks 频繁触发，Style+Pin 保持与 Correction 相同的 PSNR——证明钉扎有效防止了风格注入的内容漂移
 - 人像 ArcFace 相似度 0.73-0.95，身份保持验证通过
 - 脚本：`scripts/phase4_scenes.py`，输出：`outputs/phase4_sota/scenes/`
@@ -484,6 +497,7 @@ v_prediction 下 DDIM 反演质量较低（50 步 baseline PSNR 10-18 dB，vs SD
 | **P2P (attn)** | **23.77** | **0.089** | **+2.98** | None | ~GB | 注意力混合 |
 | ControlNet (Canny) | 9.55 | 0.781 | — | Pre-trained | ~1.4GB | 条件生成 |
 | **Ours_Corr** | **23.70** | **0.097** | **+2.92** | None | **~MB** | 特征校正 |
+| **Ours_StylePin** | **23.69** | **0.097** | **+2.91** | None | **~MB** | 校正+风格+钉扎 |
 
 ### 核心结论
 

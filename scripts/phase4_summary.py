@@ -73,7 +73,7 @@ def main():
         "P2P": "outputs/phase4_sota/p2p/metrics.json",
         "ControlNet": "outputs/phase4_sota/controlnet/metrics.json",
         "Ours_Corr": "outputs/phase2_edict/metrics.json",
-        "Ours_StylePin": "outputs/phase3_prep/metrics_full.json",
+        "Ours_StylePin": "outputs/phase3_prep/style_transfer/metrics.json",
     }
 
     # Common images (coco_val only)
@@ -141,15 +141,8 @@ def main():
                 candidates = [
                     r for r in results
                     if r.get("image") == img_name
-                    and "pin" in r.get("lambda", "")
-                ]
-                # Also try alternate key
-                if not candidates:
-                    candidates = [
-                        r for r in results
-                        if r.get("image") == img_name
-                        and r.get("method", "") == "style_pin"
-                    ]
+                    and "pin" in str(r.get("lambda", ""))
+                ][:1]  # take first match (usually λ=0.5)
 
             if candidates:
                 best = candidates[0]
