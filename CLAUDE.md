@@ -6,20 +6,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 硕士毕业设计：**基于扩散模型的内容保持与风格解耦图像编辑**。作者为塔拉尼提·居马努尔。
 
-核心目标：在 Stable Diffusion 的 DDIM 反演-重建 pipeline 上解决两个问题：
-1. **内容漂移**：DDIM 反演-重建过程中的信息丢失
-2. **风格耦合**：编辑过程中内容与风格难以独立控制
+**核心贡献**：
+
+**Our contributions are twofold:**
+
+1. **Diagnosis-driven diffusion feature analysis.** We systematically quantify and localize layer-wise feature drift in diffusion inversion-reconstruction, revealing the structural distribution of reconstructable information across UNet layers. This transforms diffusion inversion from a black-box process into a diagnosable structural system.
+
+2. **Closed-loop residual correction framework for content-preserving editing.** We propose a feature-space residual projection mechanism combined with CLIP-based orthogonal feedback control. The framework unifies drift correction, style disentanglement, and adaptive content protection into a single training-free pipeline — a "diagnose-then-control" architecture that is rare in diffusion-based editing.
+
+两个创新点的逻辑关系：创新点 1（诊断）告诉你"模型哪里在丢失信息"，创新点 2（控制）在这些位置做几何修正 + 语义闭环修复。二者构成**诊断 → 控制**的闭环系统，而非独立方法的拼装。
+
+**核心目标**：在 Stable Diffusion 的 DDIM 反演-重建 pipeline 上同时实现内容保持和风格解耦。
+
+## Unified Drift Correction Framework
+
+框架由四个集成的子模块组成，各自解决 pipeline 中的一个问题：
+
+| 模块 | 功能 | 核心方法 |
+|------|------|---------|
+| **Drift Diagnosis** | 定位 UNet 各层内容漂移 | Hook 38 层，逐层测量 $\|f^{\text{inv}} - f^{\text{recon}}\|$ |
+| **Residual Correction** | 零训练恢复丢失内容 | $f_{\text{out}} = f_{\text{recon}} + \lambda \cdot (f_{\text{inv}} - f_{\text{recon}})$ |
+| **Style Injection** | CLIP 空间正交风格注入 | $v_{\text{style}} = v_{\text{text}} - \text{proj}_{v_{\text{content}}}(v_{\text{text}})$ |
+| **Pinning Feedback** | 闭环控制内容不漂移 | 周期性 VAE 解码 → CLIP 投影检测 → 自适应缩减风格强度 |
 
 ## 项目阶段
 
 | 阶段 | 时间 | 状态 |
 |------|------|------|
-| 第一阶段 | 2026.5 | ✅ 完成：DDIM 反演-重建漂移动态诊断 |
-| 第二阶段 | 2026.6 | ✅ 完成：零训练残差校正模块 + 消融 + 基线对比 |
-| 第三阶段 | 2026.6–7 | ✅ 完成：CLIP 正交投影 + prompt 风格注入 + 钉扎约束，论文配图已生成 |
-| 第四阶段 | 2027.2– | ⏳ 论文撰写与答辩 |
-| SDXL 泛化 | 2026.7 | ✅ 完成：Phase 1-3 全部验证，跨 UNet 架构泛化成功 |
-| DiT 泛化 | 2026.7 | ✅ 完成：Phase 1-3 全部验证，跨 Transformer 架构泛化成功 |
+| 第一阶段 | 2026.5 | ✅ 完成：DDIM 反演-重建漂移动态诊断（→ Drift Diagnosis） |
+| 第二阶段 | 2026.6 | ✅ 完成：零训练残差校正模块 + 消融 + 基线对比（→ Residual Correction） |
+| 第三阶段 | 2026.6–7 | ✅ 完成：CLIP 正交投影 + 风格注入 + 钉扎约束（→ Style Injection + Pinning） |
+| 第四阶段 | 2027.2–7 | ✅/⏳ 实验全部完成，论文撰写中 |
+| 跨架构验证 | 2026.7 | ✅ SDXL / DiT 全部验证通过
 
 ## 开发环境
 
@@ -73,25 +91,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 2. **Prompt 风格注入**：SD text embedding 空间线性插值，无模态差异
 3. **正交钉扎约束**：去噪过程周期性解码→CLIP 编码→检查内容投影偏离→自适应缩减风格强度
 
-### 关键结果（coco_val，50 步）
+### 关键结果（coco_val 19 图，50 步，style_transfer 模式）
 
-| 方法 | PSNR | LPIPS |
-|------|------|-------|
-| DDIM Baseline | 19.9 | 0.150 |
-| Style Only (无保护) | 19.0 | **0.312** |
-| Ours (corr+style+pin) | 20.8 | **0.125** |
+| 方法 | PSNR | LPIPS | CLIP_content |
+|------|------|-------|-------------|
+| DDIM Baseline | 22.47 | 0.218 | 0.846 |
+| Correction Only | 25.21 | 0.094 | 0.972 |
+| Ours (corr+style+pin) | 25.21 | 0.094 | 0.973 |
 
-风格注入无保护时 LPIPS 从 0.15 崩溃到 0.31，框架保护后恢复到 0.12。钉扎约束跨图触发（5-8/9 checks），自适应调控风格强度。
+额外验证（compare 模式，val 5 图）：style_only (无保护) 在 face1 上 LPIPS=0.46，校正后恢复到 0.075。钉扎约束跨图触发（5-8/9 checks），自适应调控风格强度。
 
 ### 论文配图（`outputs/thesis_figures/`）
 
 | 文件 | 内容 |
 |------|------|
+| `unified_framework.png` | 统一框架架构图：6 阶段 pipeline + 指标标注 |
 | `phase2_correction.png` | 6 图 × (Original + Baseline + Ours) 对比网格 |
 | `phase3_framework.png` | 风格迁移安全框架：Content + Baseline + Style Only + Ours |
 | `direction_interpolation.png` | SLERP 风格方向插值 watercolor→cyberpunk |
 | `phase2_ablation.png` | 3 图平均消融：top5 / random5 / encoder5 / attention5 / latent_interp |
+| `failure_cases.png` | 6 类失败案例分析网格 |
+| `unified_ablation_table.tex` / `.md` | 统一消融汇总表 |
 | `coco_val_summary.json` | 全部 19 张 coco 图片定量评估 |
+| `failure_analysis.md` | 失败案例文字分析 |
 
 ---
 
@@ -102,11 +124,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | # | 任务 | 说明 | 状态 |
 |---|------|------|------|
 | 1 | 三类场景验证 | 人像(8张)、建筑(5张)、艺术字体(5张)，全部通过 Phase 2+3 验证 | ✅ |
-| 2 | 理论深化 | 方向 A：建立理论框架，回应"方法太简单"的批评 | ⏳ |
-| 2.1 | 信息论分析 | 量化每层特征与原始图像的 mutual information，解释为何 ResNet 特征携带可校正信息 | ⏳ |
-| 2.2 | 流形视角 | 反演/重建轨迹视为特征流形上的两条路径，校正是沿梯度方向一阶修正 | ⏳ |
-| 2.3 | 收敛性证明 | 漂移加权引入后校正的收敛性理论保证 | ⏳ |
-| 2.4 | 理论章节撰写 | 整合信息论 + 流形 + 收敛性，形成论文核心理论章节 | ⏳ |
+| 2 | 理论深化 | 以特征流形为主线，建立"几何解释 → 实验验证 → 稳定保证"三段式理论框架 | ✅ |
+| 2.1 | 信息论分析 | 量化每层特征与原始图像的 mutual information，解释为何 ResNet 特征携带可校正信息 | ✅ |
+| 2.2 | 流形视角 | 反演/重建轨迹视为特征流形上的两条路径，校正是沿梯度方向一阶修正 | ✅ |
+| 2.3 | 收敛性证明 | 漂移加权引入后校正的收敛性理论保证 | ✅ |
+| 2.4 | 理论章节撰写 | 整合信息论 + 流形 + 收敛性，形成论文核心理论章节 | ✅ |
 | 3 | 跨架构漂移指纹图 | SD 1.5 / SDXL / DiT 三种架构漂移热力图并排对比，证明诊断的架构洞察力 | ✅ |
 | 4 | 论文撰写 | 正文 + 图表 + 参考文献 | ⏳ |
 
@@ -118,6 +140,172 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | — | DiT 泛化 | Phase 1-3 全部验证，跨 Transformer 架构泛化成功 |
 | — | SOTA 横向对比 | DDIM / EDICT / NTI(BLIP) / P2P / ControlNet / LAMS-Edit 全部完成 |
 | — | 综合对比表 | `outputs/phase4_sota/` |
+| — | 信息论分析 | 逐层残差可校正信息含量（见下方信息论分析节） |
+
+---
+
+## 信息论分析（任务 2.1）✅
+
+**方法**：逐层边际校正收益（per-layer marginal correction）
+
+对每一层单独实验：DDIM 反演 → 仅在该层注入残差校正 → 重建。ΔPSNR 直接测量该层残差信号的**可校正信息含量** `I(f_inv - f_recon; X_original)`。
+
+这是因果干预框架下的信息度量——不依赖 MI 估计的正则化假设。
+
+### 19 图结果（coco_val，50 步，λ=0.7）
+
+| 层类型 | ΔPSNR | 层数 |
+|--------|-------|------|
+| **ResNet** | **+2.27 ± 0.48 dB** | 22 |
+| Attention | +1.09 ± 0.48 dB | 8 |
+| **比率** | **2.1×** | |
+
+| UNet 区域 | ΔPSNR | 层数 |
+|-----------|-------|------|
+| encoder | +2.11 ± 0.55 dB | 11 |
+| bottleneck | +1.39 ± 0.25 dB | 3 |
+| decoder | +1.95 ± 0.81 dB | 16 |
+
+### Top-5 层
+
+| 排名 | 层 | ΔPSNR | 类型 |
+|------|-----|-------|------|
+| 1 | `down_blocks.0.resnets.0` | +2.79 dB | ResNet, encoder |
+| 2 | `up_blocks.3.resnets.1` | +2.78 dB | ResNet, decoder |
+| 3 | `down_blocks.0.resnets.1` | +2.75 dB | ResNet, encoder |
+| 4 | `up_blocks.3.resnets.0` | +2.75 dB | ResNet, decoder |
+| 5 | `up_blocks.2.resnets.2` | +2.70 dB | ResNet, decoder |
+
+### Bottom-5（全是 Attention）
+
+`up_blocks.0.attentions.0` 在全部 19 张图上 ΔPSNR = **0.00**——残差与像素重建完全正交。
+
+### 关键发现
+
+1. **ResNet 可校正信息是 Attention 的 2.1 倍**：验证了 Phase 2 消融中 attention5 < top5 的结果
+2. **最高可校正信息在 encoder 浅层和 decoder 深层**：encoder 最接近输入（保留像素细节），decoder 深层空间分辨率最高
+3. **ΔPSNR 与 Phase 1 漂移弱负相关 (r ≈ -0.11)**：漂移大的层 ≠ 校正收益大的层，与 Phase 2 消融"漂移加权无效"完全一致
+4. **`up_blocks.0.attentions.0` 绝对零收益**：Attention 编码空间关系而非像素值，残差与像素重建正交
+
+### 论文叙事要点
+
+- Phase 1 诊断揭示**哪里在漂移**（架构瓶颈定位）
+- 信息论分析揭示**哪里的漂移可校正**（信息含量量化）
+- 两者叠加解释为什么校正机制有效，以及为什么不需精细选层
+
+脚本：`scripts/phase4_info_theory.py`，输出：`outputs/phase4_info_theory/`
+
+---
+
+## 流形视角分析（任务 2.2）✅
+
+**方法**：收集 inversion 和 reconstruction 路径上的特征，用 PCA 分析特征流形结构。
+
+三个分析维度：
+1. **PCA 谱**：特征矩阵的 eigenvalue 衰减 → 验证特征位于低维流形
+2. **固有维度对比**：inversion vs reconstruction 的固有维度差异
+3. **残差-切空间对齐**：d = f_inv - f_recon 在 top-k PCA 分量上的能量占比
+
+### 19 图结果（coco_val，50 步，每 5 步采样）
+
+**残差-切空间对齐（top-5 PCA 分量）**：
+
+| 类型 | 对齐度 | 层数 |
+|------|--------|------|
+| **ResNet** | **0.572** | 8 |
+| Attention | 0.420 | 2 |
+| **比率** | **1.36×** | |
+
+**最高对齐层**：
+
+| 排名 | 层 | 对齐度 | 固有维度 |
+|------|-----|--------|---------|
+| 1 | `down_blocks.0.resnets.0` | 0.908 | 4 |
+| 2 | `up_blocks.3.resnets.2` | 0.904 | 2 |
+| 3 | `up_blocks.3.resnets.1` | 0.788 | 9 |
+
+**最低对齐层**：
+
+| 层 | 对齐度 | 类型 |
+|-----|--------|------|
+| `mid_block.attentions.0` | 0.289 | Attention |
+| `mid_block.resnets.1` | 0.294 | ResNet, bottleneck |
+| `down_blocks.3.resnets.1` | 0.297 | ResNet, encoder deep |
+
+### 关键发现
+
+1. **特征流形呈沙漏形状**：encoder 浅层 dim=4 → bottleneck dim=35 → decoder 深层 dim=2。两端紧致、中间发散
+2. **ResNet 残差比 Attention 更贴合流形切空间**（对齐度 +36%），Attention 残差更多是随机噪声
+3. **对齐度最高的层正好是信息论分析中 ΔPSNR 最高的层**：encoder 浅层和 decoder 深层——两者从不同角度指向同一结论
+4. **固有维度 vs 对齐度呈负相关**：紧致流形（低 dim）上的残差对齐度更高 → 校正信号更可靠
+
+### 几何解释
+
+- 自然图像特征位于低维流形 M ⊂ R^C
+- f_inv ∈ M（反演沿 M 行走），f_recon 偏离 M（DDIM 离散化误差累积）
+- 残差 d = f_inv - f_recon 主要位于 M 在 f_recon 处的切空间 T_{f_recon}M
+- 校正 f_recon + λ·d 是将特征拉回流形的一阶黎曼梯度步
+- ResNet 层的切空间估计更准确 → 校正效果更好
+
+### 论文叙事
+
+信息论分析 + 流形视角形成互补的理论基础：
+- **信息论**回答"多少信息可恢复"（ΔPSNR 量化）
+- **流形视角**回答"为什么残差是有意义的几何修正"（切空间对齐）
+
+两者共同解释了校正机制的有效性，不需要精细层选择。
+
+脚本：`scripts/phase4_manifold.py`，输出：`outputs/phase4_manifold/`
+
+---
+
+## 收敛性证明（任务 2.3）✅
+
+完整的数学推导见 `thesis/theory/convergence_proof.md`，数值验证见 `scripts/phase4_convergence_verify.py`。
+
+### 四个核心结果
+
+**引理 1（误差收缩）**
+$$\|T_\lambda(f^{\text{recon}}) - f^{\text{inv}}\| = |1-\lambda| \cdot \|f^{\text{recon}} - f^{\text{inv}}\|$$
+对 λ ∈ (0,2)，误差严格收缩。漂移加权不破坏收敛性（w_i ∈ [0.5, 2.0] 时 γ_i < 1）。
+
+**最优 λ 定理**
+$$\lambda^* = \frac{1 - \rho\alpha}{1 + \alpha^2 - 2\rho\alpha}, \quad \alpha = \sigma_{\text{inv}}/\sigma_{\text{recon}}$$
+- 等精度（α=1）: λ* = 0.5
+- Phase 2 经验 λ=0.7 → α ≈ 0.65 → 反演特征比重建精确 1.5×
+
+**定理 2（Skip Connection 传播）**
+$$d_{l+1} \approx (I + \nabla F_l) \cdot \lambda d_l \approx \lambda d_l$$
+- 残差网络中 ||∇F_l|| ≪ 1 → 校正信号以 ≈ 单位增益传播
+- **直接解释 random5 ≈ top5**：注入层不重要，skip connections 把信号传到所有后续层
+
+**定理 3 & 4（迭代与多层收敛）**
+- 迭代校正指数收敛：||f^(k) - f_inv|| = |1-λ|^k · ||f^(0) - f_inv||
+- λ=0.7 时 6 步收敛到 10⁻³
+- 多层联合收敛：所有 30 层实测 ΔPSNR ≥ 0，全局收敛验证通过
+
+### 数值验证结果
+
+| 验证项 | 结果 |
+|--------|------|
+| 误差收缩公式 | ✓ 实验数据精确匹配 |1-λ| 理论曲线 |
+| Skip connection 传播 | ✓ 信号传播强度 = 0.716 ≈ λ = 0.700 |
+| 漂移加权 γ 范围 | ✓ [0.018, 0.638]，全部 < 1 |
+| 全局收敛性 | ✓ 29/30 层 ΔPSNR > 0，1 层 = 0（Attention，非发散） |
+
+脚本：`scripts/phase4_convergence_verify.py`，输出：`outputs/phase4_convergence/`
+
+---
+
+## 设计原则
+
+三个方法论原则将本工作从"工程调试"升级为"方法论贡献"：
+
+1. **Diagnosis precedes intervention**（诊断先于干预）：Phase 1 的逐层漂移诊断先于 Phase 2 的校正，确保干预有依据
+2. **Correction is geometry-aware**（校正利用几何结构）：信息论 + 流形分析证明残差是流形切方向的有意义信号，而非随机噪声
+3. **Editing is feedback-controlled**（编辑是闭环控制的）：CLIP 钉扎使风格编辑从"开环注入"升级为"闭环自适应控制"
+
+---
 
 ### 场景数据准备
 
@@ -164,7 +352,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `scripts/dit_phase3_prep.py` | DiT Phase 3：CLIP 正交投影 + 风格注入 + 钉扎（1024/2048-dim 适配） |
 | `scripts/phase4_p2p.py` | Phase 4：Prompt-to-Prompt 交叉注意力混合对比 |
 | `scripts/phase4_controlnet.py` | Phase 4：ControlNet Canny 条件生成对比 |
+| `scripts/phase4_fingerprint.py` | Phase 4：跨架构漂移指纹图（SD 1.5 / SDXL / DiT 并排对比） |
 | `scripts/phase4_summary.py` | Phase 4：SOTA 综合对比表生成 |
+| `scripts/phase4_info_theory.py` | Phase 4：逐层残差可校正信息含量分析（信息论） |
+| `scripts/phase4_manifold.py` | Phase 4：特征流形分析与校正几何解释（流形视角） |
+| `scripts/phase4_convergence_verify.py` | Phase 4：收敛性数值验证 |
+| `scripts/gen_unified_framework_diagram.py` | 统一框架架构图生成 |
+| `scripts/gen_unified_ablation_table.py` | 统一消融汇总表生成 |
+| `scripts/gen_failure_case_figure.py` | 失败案例分析图生成 |
 
 ---
 

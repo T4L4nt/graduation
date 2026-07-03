@@ -414,54 +414,6 @@ def run_correction_with_style_and_pinning(
     return m, recon, elapsed, pinning_log
 
 
-# (histogram_match, make_grid_image are imported from phase2_common)
-def _histogram_match_removed(source, target):
-    """Per-channel histogram matching: map source distribution to target.
-
-    source, target: [1,3,H,W] tensors in [0,1].  Display-only, metrics unaffected.
-    """
-    src = source.squeeze(0).permute(1,2,0).cpu().float().numpy()
-    tgt = target.squeeze(0).permute(1,2,0).cpu().float().numpy()
-    out = np.empty_like(src)
-    for c in range(3):
-        s_ch = (src[:,:,c] * 255).clip(0,255).astype(np.uint8)
-        t_ch = (tgt[:,:,c] * 255).clip(0,255).astype(np.uint8)
-        hs, _ = np.histogram(s_ch, 256, (0,256)); ht, _ = np.histogram(t_ch, 256, (0,256))
-        cdf_s = np.cumsum(hs.astype(float)) / max(hs.sum(), 1)
-        cdf_t = np.cumsum(ht.astype(float)) / max(ht.sum(), 1)
-        lut = np.zeros(256, dtype=np.uint8)
-        j = 0
-        for i in range(256):
-            while j < 255 and cdf_t[j] < cdf_s[i]:
-                j += 1
-            lut[i] = j
-        out[:,:,c] = lut[s_ch] / 255.0
-    return torch.from_numpy(out).permute(2,0,1).unsqueeze(0).to(
-        device=source.device, dtype=source.dtype)
-
-
-def make_grid_image(images_dict, output_path, ncols=4, reference_tensor=None):
-    tensors, labels = [], []
-    for name, t in images_dict.items():
-        if t is not None:
-            display = t.float().clamp(0, 1)
-            # Histogram-match reconstructions to reference to fix VAE brightness drift
-            if reference_tensor is not None and "Original" not in name:
-                display = histogram_match(display, reference_tensor.float().clamp(0, 1))
-            tensors.append(display)
-            labels.append(name)
-    n = len(tensors)
-    if n == 0: return
-    nrows = (n + ncols - 1) // ncols
-    fig, axes = plt.subplots(nrows, ncols, figsize=(3*ncols, 3*nrows))
-    axes = axes.flatten() if nrows * ncols > 1 else [axes]
-    for i in range(len(axes)):
-        if i < n:
-            axes[i].imshow(tensors[i].squeeze(0).permute(1, 2, 0).cpu())
-            axes[i].set_title(labels[i], fontsize=8)
-        axes[i].axis("off")
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=150); plt.close()
 
 
 def _save_csv(rows, filename):
@@ -546,9 +498,6 @@ def mode_injection(args):
     # CLIP orthogonal projection with real image embedding
     v_content = extractor.encode_text("a photo")
     v_img = extractor.encode_image(img_path)
-    _, v_style, cos = extractor.compute_orthogonal_decomposition(v_img, v_content)
-    style_text, style_key, style_sim = find_closest_style(v_style, extractor)
-    print(f"图片: {img_name}  cos(v_style,content)={cos:.2e}  风格匹配: {style_key}  sim={style_sim:.3f}")
     _, v_style, cos = extractor.compute_orthogonal_decomposition(v_img, v_content)
     style_text, style_key, style_sim = find_closest_style(v_style, extractor)
     print(f"图片: {img_name}  cos(v_style,content)={cos:.2e}  风格匹配: {style_key}  sim={style_sim:.3f}")
