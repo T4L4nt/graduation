@@ -84,13 +84,11 @@ def test_generation():
 
     # Prepare embeddings
     prompt_embeds = pipe.encode_prompt("", DEVICE, 1, False)[0]
-    v_orig = extractor.encode_image(IMAGE)
     v_content = extractor.encode_text("a photo")
 
-    # Style direction via StyleTex
-    _, v_style, cos_check = extractor.compute_orthogonal_decomposition(v_orig, v_content)
-    print(f"  StyleTex orthogonal check: cos(v_style, v_content) = {cos_check:.6f}")
-    assert abs(cos_check) < 1e-2, f"Style should be orthogonal to content, got cos={cos_check}"
+    # Style from EXTERNAL text target (not self-decomposition)
+    style_text = "an oil painting in impressionist style"
+    print(f"  Style text: '{style_text}'")
 
     # Get correction layers
     from phase2_common import get_top_drift_layers
@@ -106,7 +104,8 @@ def test_generation():
         metrics, recon, elapsed, traj = dcsc_controlled_generation(
             pipe, original_latent, original_tensor, prompt_embeds,
             num_steps=50, corr_lam=0.5, corr_layers=corr_layers,
-            v_style=v_style, v_content=v_content, extractor=extractor,
+            extractor=extractor, v_content=v_content,
+            style_text=style_text,
             lambda_0=0.5, Kp=1.0, control_freq=5,
             style_mode="extra_token", lpips_fn=lpips_fn,
         )
@@ -117,7 +116,7 @@ def test_generation():
         print(f"    Control calls: {traj['n_control_calls']}")
         print(f"    Final basis size: {traj['final_basis_size']}")
         print(f"    Final lambda: {traj['final_lambda']:.3f}")
-        print(f"    Stability bound: {traj['stability_bound']:.4f}")
+        print(f"    Stability ratio: {traj['empirical_stability_ratio']:.4f}")
         print(f"    Trajectory:")
         for i, s in enumerate(traj['trajectory']['steps']):
             print(f"      step={s:3d}  λ={traj['trajectory']['lambda'][i]:.3f}  "

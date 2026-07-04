@@ -361,8 +361,8 @@ def generate_dcsc_figure(pipe, lpips_fn):
         plot_pareto_frontier, generate_comparison_table,
     )
     from dcsc_stability import (
-        estimate_lipschitz_constant, verify_bounded_drift,
-        plot_drift_bounds, plot_contraction_factors,
+        estimate_lipschitz_constant, verify_empirical_stability,
+        plot_stability_grid, plot_stability_pass_rate,
     )
 
     print("\n" + "=" * 60)
@@ -371,6 +371,8 @@ def generate_dcsc_figure(pipe, lpips_fn):
 
     extractor = CLIPFeatureExtractor()
     corr_layers = get_top_drift_layers(5)
+    v_content = extractor.encode_text("a photo")
+    style_text = "an oil painting in impressionist style"
 
     # Use 5 coco_val images for Pareto scan
     pareto_images = [
@@ -385,10 +387,10 @@ def generate_dcsc_figure(pipe, lpips_fn):
     out_dir = OUT_DIR / "dcsc"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # ---- Panel 1: Pareto Frontier ----
-    print("\n[Panel 1] Pareto frontier comparison...")
+    # ---- Panel 1: Fair Pareto Frontier Comparison ----
+    print(f"\n[Panel 1] Pareto frontier comparison  style='{style_text}'")
     compare_results = compare_across_methods(
-        pipe, pareto_images, extractor,
+        pipe, pareto_images, extractor, style_text, v_content,
         num_steps=50, corr_lam=0.5, corr_layers=corr_layers,
         lpips_fn=lpips_fn,
         dcsc_Kp=1.0, dcsc_lambda_0=0.5,
@@ -396,7 +398,7 @@ def generate_dcsc_figure(pipe, lpips_fn):
     plot_pareto_frontier(
         compare_results,
         str(out_dir / "dcsc_pareto.png"),
-        title="DCSC: Style-Content Pareto Frontier")
+        title=f"Style-Content Pareto Frontier — '{style_text[:40]}...'")
     generate_comparison_table(
         compare_results, str(out_dir / "dcsc_comparison.tex"))
 
@@ -411,23 +413,25 @@ def generate_dcsc_figure(pipe, lpips_fn):
             cc = np.mean([e.get("CLIP_content", 0) for e in entries])
             print(f"    {method:15s}: PSNR={psnr:.2f} CLIP_s={cs:.3f} CLIP_c={cc:.3f}")
 
-    # ---- Panel 2: Stability Verification ----
-    print("\n[Panel 2] Stability bound verification...")
+    # ---- Panel 2: Empirical Stability Analysis ----
+    print(f"\n[Panel 2] Empirical stability analysis...")
     L = estimate_lipschitz_constant(extractor, pipe, pareto_images[:3], n_pairs=30)
-    bound_results = verify_bounded_drift(
-        pipe, pareto_images[:3], extractor,
+    stability_results = verify_empirical_stability(
+        pipe, pareto_images[:3], extractor, style_text, v_content,
         num_steps=50, corr_lam=0.5,
         Kp_values=[0.5, 1.0, 2.0, 5.0],
         lambda_0_values=[0.3, 0.5, 0.7],
-        control_freq=5, lpips_fn=lpips_fn, L_estimate=L,
+        control_freq=5, lpips_fn=lpips_fn,
     )
     stability_out = out_dir / "stability"
     stability_out.mkdir(exist_ok=True)
-    plot_drift_bounds(bound_results, str(stability_out / "drift_bounds.png"))
-    plot_contraction_factors(bound_results, str(stability_out / "bound_tightness.png"))
+    plot_stability_grid(stability_results, str(stability_out / "stability_grid.png"))
+    plot_stability_pass_rate(stability_results, str(stability_out / "stability_pass_rate.png"))
 
+    n_stable = stability_results["n_stable"]
+    n_total = stability_results["n_total"]
     print(f"\n  L_estimate={L:.4f}")
-    print(f"  Bound pass rate: {bound_results['pass_rate']:.1%}")
+    print(f"  Stability: {n_stable}/{n_total} stable ({100*n_stable/max(n_total,1):.1f}%)")
     print(f"  Output: {out_dir}")
 
 

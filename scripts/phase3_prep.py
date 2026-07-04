@@ -1134,6 +1134,10 @@ def mode_dcsc(args):
     lpips_fn = lpips.LPIPS(net="alex").to(DEVICE) if not args.skip_lpips else None
     corr_layers = get_top_drift_layers(5)
 
+    # Style definition: EXTERNAL text target
+    style_text = getattr(args, "style_text", "an oil painting in impressionist style")
+    v_content = extractor.encode_text("a photo")
+
     # Get Kp and lambda_0 values from CLI or defaults
     Kp_values = list(getattr(args, "Kp", [0.5, 1.0, 2.0, 5.0]))
     lambda_0_values = list(getattr(args, "lambda_0", [0.3, 0.5, 0.7]))
@@ -1141,6 +1145,7 @@ def mode_dcsc(args):
     dcsc_Kp_opt = getattr(args, "dcsc_Kp_opt", 1.0)
     dcsc_lam_opt = getattr(args, "dcsc_lam_opt", 0.5)
 
+    print(f"Style target: '{style_text}'")
     print(f"Kp values: {Kp_values}")
     print(f"lambda_0 values: {lambda_0_values}")
     print(f"control_freq: {control_freq}")
@@ -1151,7 +1156,7 @@ def mode_dcsc(args):
     # ---- Pareto scan ----
     print(f"\n[1] Pareto scan...")
     results = pareto_scan(
-        pipe, images, extractor,
+        pipe, images, extractor, style_text, v_content,
         num_steps=args.steps, corr_lam=0.5, corr_layers=corr_layers,
         Kp_values=Kp_values, lambda_0_values=lambda_0_values,
         control_freq=control_freq, lpips_fn=lpips_fn,
@@ -1174,7 +1179,7 @@ def mode_dcsc(args):
     # ---- Cross-method comparison ----
     print(f"\n[2] Cross-method comparison at optimal DCSC params...")
     compare_results = compare_across_methods(
-        pipe, images, extractor,
+        pipe, images, extractor, style_text, v_content,
         num_steps=args.steps, corr_lam=0.5, corr_layers=corr_layers,
         lpips_fn=lpips_fn,
         dcsc_Kp=dcsc_Kp_opt, dcsc_lambda_0=dcsc_lam_opt,
@@ -1226,6 +1231,8 @@ def main():
                         help="DCSC: optimal Kp for cross-method comparison")
     parser.add_argument("--dcsc-lam-opt", type=float, default=0.5,
                         help="DCSC: optimal lambda_0 for cross-method comparison")
+    parser.add_argument("--style-text", type=str, default="an oil painting in impressionist style",
+                        help="DCSC: external style target text prompt")
     parser.add_argument("--skip-lpips", action="store_true")
     args = parser.parse_args()
 
