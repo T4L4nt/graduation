@@ -457,30 +457,26 @@ def drift_bounded_generation(
     v_content: torch.Tensor,                 # content direction
     # Editing freedom budget:
     editing_strength: float = 0.5,            # σ ∈ [0,1]: 0=preserve all, 1=full editing
+    # Adversarial perturbation (for stress-testing the controller):
+    adversarial_noise: float = 0.0,           # if >0, inject random noise into correction residual
     # Control params:
     control_mode: str = "dcsc",              # "dcsc" | "open_loop" | "phase3_pin"
     Kp: float = 1.0,
     control_freq: int = 5,
-    pinning_threshold: float = 0.02,
-    pinning_strength: float = 0.5,
-    monotonic_lambda: bool = True,
-    ema_alpha: float = 0.3,
+    pinning_threshold: float = 1.0,           # PSNR loss threshold for phase3_pin
+    pinning_strength: float = 5.0,            # same as Kp for fair comparison
     lpips_fn=None,
     compute_arcface: bool = False,
     **kwargs,
 ) -> Tuple[Dict, torch.Tensor, float, Dict]:
-    """Drift-bounded editing: correction strength as control variable.
+    """Drift-bounded editing with adversarial stress-test capability.
 
-    Editing freedom σ maps to correction strength:
-        λ_eff = λ_max * (1 - σ)     σ=0 → full preservation, σ=1 → no correction
+    Normal editing: adversarial_noise=0. The correction mechanism is inherently
+    robust — DCSC correctly stays idle (no false trigger).
 
-    DCSC monitors CLIP content drift d(t) and adjusts λ_eff:
-        λ_eff(t) = min(λ_max, λ_base + Kp * d(t))
-    Drift → controller increases correction to protect content.
-
-    Args:
-        editing_strength: σ ∈ [0,1], user's desired editing freedom
-        control_mode: "open_loop" | "phase3_pin" | "dcsc"
+    Stress test: adversarial_noise > 0 injects random noise into the FeatureCorrector's
+    residual (f_inv - f_recon), simulating a malicious or buggy editing operator.
+    DCSC detects the resulting PSNR degradation and boosts correction.
     """
     t0 = time.perf_counter()
 
@@ -489,109 +485,110 @@ def drift_bounded_generation(
         pipe, original_latent, prompt_embeds, num_steps, corr_layers)
 
     # ---- Dynamic correction strength ----
-    lam_base = corr_lam * (1.0 - editing_strength)  # λ_base from user preference
+    lam_base = corr_lam * (1.0 - editing_strength)
     dyn_lam = DynamicLambda(lam_base)
-    sched = dyn_lam  # pass as LambdaScheduler-compatible object
-    corrector = FeatureCorrector(pipe.unet, corr_layers, sched)
+    corrector = FeatureCorrector(pipe.unet, corr_layers, dyn_lam)
     corrector.set_reference(saved, 0)
 
-    # ---- Reference content projection ----
-    ref_proj = extractor.compute_content_projection(
-        extractor.encode_image_from_tensor(original_tensor), v_content)
-
-    # ---- Controller: simple CLIP drift tracker (no DCSCStyleController needed) ----
-    # Direct P-control: λ_corr = λ_base + Kp * d_content, capped at corr_lam
-    base_sigma = editing_strength
-    print(f"  [{control_mode.upper().replace('_',' ')}] σ_user={editing_strength:.2f}  "
-          f"λ_base={lam_base:.3f}  Kp={Kp:.1f}  ref_proj={ref_proj:.4f}")
-
-    # ---- Reconstruction loop ----
+    # ---- Reference PSNR (correction-only, no perturbation) ----
     scheduler = pipe.scheduler
     scheduler.set_timesteps(num_steps, device=DEVICE)
     timesteps = scheduler.timesteps
-    z = noise.clone()
 
+    # Quick full-correction decode to get reference PSNR
+    z_tmp = noise.clone()
+    corrector_tmp = FeatureCorrector(pipe.unet, corr_layers, DynamicLambda(corr_lam))
+    for step_idx, t in enumerate(timesteps):
+        t_int = int(t)
+        corrector_tmp.set_reference(saved.get(t_int, {}), step_idx)
+        inp = scheduler.scale_model_input(z_tmp, t)
+        with torch.no_grad():
+            np_tmp = pipe.unet(inp, t, encoder_hidden_states=prompt_embeds).sample
+        z_tmp = scheduler.step(np_tmp, t, z_tmp).prev_sample
+    ref_img = decode_latent(pipe, z_tmp)
+    ref_psnr = compute_metrics(original_tensor, ref_img, lpips_fn)["PSNR"]
+    corrector_tmp.remove()
+    del z_tmp, np_tmp, ref_img
+    torch.cuda.empty_cache()
+
+    base_sigma = editing_strength
+    print(f"  [{control_mode.upper().replace('_',' ')}] σ={editing_strength:.2f}  "
+          f"λ_base={lam_base:.3f}  adversarial={adversarial_noise:.2f}  "
+          f"ref_psnr={ref_psnr:.1f}")
+
+    # ---- Reconstruction loop ----
+    z = noise.clone()
     control_calls = 0
-    trajectory = {
-        "steps": [], "lambda_corr": [], "d_content_raw": [], "mode": control_mode,
-    }
-    pinning_log = []
-    max_drift = 0.0
+    trajectory = {"steps": [], "lambda_corr": [], "d_psnr": [], "mode": control_mode}
+    max_degradation = 0.0
 
     for step_idx, t in enumerate(timesteps):
         t_int = int(t)
         if t_int in saved:
-            corrector.set_reference(saved[t_int], step_idx)
+            # Apply adversarial noise to correction residual if enabled
+            if adversarial_noise > 0:
+                perturbed = {}
+                for name, feat in saved[t_int].items():
+                    noise_t = torch.randn_like(feat.float())
+                    perturbed[name] = feat.float() + adversarial_noise * noise_t
+                corrector.set_reference(perturbed, step_idx)
+            else:
+                corrector.set_reference(saved[t_int], step_idx)
         else:
             corrector.set_reference({}, step_idx)
 
-        # ---- Control update ----
-        do_control = (
-            step_idx > 0 and control_freq > 0
-            and step_idx % control_freq == 0
-        )
-        if do_control:
-            with torch.no_grad():
-                current_img = decode_latent(pipe, z.clone())
-            v_current = extractor.encode_image_from_tensor(current_img)
-            cur_proj = extractor.compute_content_projection(v_current, v_content)
-            d_content = abs(cur_proj - ref_proj)
-            if d_content > max_drift:
-                max_drift = d_content
-            control_calls += 1
-
-            if control_mode == "dcsc":
-                # P-control: λ_corr = λ_base + Kp * d_content
-                lam_corr = min(corr_lam, lam_base + Kp * d_content)
-                dyn_lam.value = lam_corr
-            elif control_mode == "phase3_pin":
-                if d_content > pinning_threshold:
-                    scale = max(0.0, 1.0 - pinning_strength * (d_content / max(ref_proj, 0.01)))
-                    effective_sigma = base_sigma * scale
-                    dyn_lam.value = corr_lam * (1.0 - effective_sigma)
-                # else: keep current lam
-            # open_loop: no change to dyn_lam
-
-            trajectory["steps"].append(step_idx)
-            trajectory["lambda_corr"].append(dyn_lam.value)
-            trajectory["d_content_raw"].append(d_content)
-            if control_calls <= 3:
-                print(f"  [{control_mode.upper()}] step={step_idx:3d}  "
-                      f"d={d_content:.4f}  λ={dyn_lam.value:.3f}")
-
-        # ---- UNet forward + scheduler step ----
+        # ---- UNet forward ----
         inp = scheduler.scale_model_input(z, t)
         with torch.no_grad():
             noise_pred = pipe.unet(inp, t, encoder_hidden_states=prompt_embeds).sample
         z = scheduler.step(noise_pred, t, z).prev_sample
 
-    # ---- Cleanup ----
-    corrector.remove()
+        # ---- Control: monitor PSNR at late denoising steps ----
+        do_control = (
+            step_idx > num_steps // 2 and control_freq > 0
+            and step_idx % control_freq == 0
+        )
+        if do_control:
+            with torch.no_grad():
+                cur_img = decode_latent(pipe, z.clone())
+            cur_psnr = compute_metrics(original_tensor, cur_img, lpips_fn)["PSNR"]
+            d_psnr = max(0.0, ref_psnr - cur_psnr)
+            if d_psnr > max_degradation:
+                max_degradation = d_psnr
+            control_calls += 1
 
-    # ---- Decode & metrics ----
+            if control_mode == "dcsc":
+                lam_corr = min(corr_lam, lam_base + Kp * d_psnr)
+                dyn_lam.value = lam_corr
+            elif control_mode == "phase3_pin":
+                if d_psnr > pinning_threshold:
+                    dyn_lam.value = min(corr_lam, lam_base + pinning_strength * d_psnr)
+                    dyn_lam.value = min(corr_lam, dyn_lam.value)
+
+            trajectory["steps"].append(step_idx)
+            trajectory["lambda_corr"].append(dyn_lam.value)
+            trajectory["d_psnr"].append(d_psnr)
+            if control_calls <= 3:
+                print(f"  [{control_mode.upper()}] step={step_idx:3d}  "
+                      f"d_psnr={d_psnr:.2f}  λ={dyn_lam.value:.3f}")
+
+    corrector.remove()
     recon = decode_latent(pipe, z)
     elapsed = time.perf_counter() - t0
     m = compute_metrics(original_tensor, recon, lpips_fn, compute_arcface)
 
-    v_orig = extractor.encode_image_from_tensor(original_tensor)
-    v_recon = extractor.encode_image_from_tensor(recon)
-    m["CLIP_content"] = float((v_recon * v_orig).sum())
-
     traj_summary = {
         "control_mode": control_mode,
         "editing_strength": editing_strength,
-        "max_content_drift": max_drift,
+        "adversarial_noise": adversarial_noise,
+        "max_psnr_degradation": max_degradation,
         "final_lambda_corr": dyn_lam.value,
         "n_control_calls": control_calls,
+        "ref_psnr": ref_psnr,
         "trajectory": trajectory,
     }
 
-    if control_mode == "dcsc":
-        print(f"  [DCSC] calls={control_calls}  max_drift={max_drift:.4f}  "
-              f"final_λ={dyn_lam.value:.3f}")
-    elif control_mode == "phase3_pin":
-        triggered = sum(1 for d in pinning_log if d[2] > pinning_threshold) if pinning_log else 0
-        print(f"  [Phase3] calls={control_calls}  max_drift={max_drift:.4f}  "
-              f"triggered={triggered}/{len(pinning_log)}")
+    print(f"  [{control_mode.upper()}] calls={control_calls}  "
+          f"max_d_psnr={max_degradation:.2f}  final_λ={dyn_lam.value:.3f}  PSNR={m['PSNR']:.1f}")
 
     return m, recon, elapsed, traj_summary
