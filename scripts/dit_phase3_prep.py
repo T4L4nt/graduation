@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 PROJ = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJ / "scripts"))
 
-from phase3_prep import (
+from phase3_common import (
     CLIPFeatureExtractor, STYLE_CANDIDATES, find_closest_style, slerp,
 )
 from dit_phase2_common import (

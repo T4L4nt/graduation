@@ -27,7 +27,7 @@ PROJ = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJ / "scripts"))
 
 from phase2_common import DEVICE, DTYPE, compute_metrics, decode_latent, save_recon_img
-from phase3_prep import CLIPFeatureExtractor, build_style_cross_attn_tokens
+from phase3_common import CLIPFeatureExtractor, build_style_cross_attn_tokens
 
 OUT_DIR = Path("outputs/phase4_sota/controlnet")
 STYLE_TEXTS = [

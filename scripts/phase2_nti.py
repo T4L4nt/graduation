@@ -140,7 +140,7 @@ def _generate_caption_clip(img_path: str) -> str:
     Uses the cached openai/clip-vit-large-patch14 to find the best-matching
     content description from a predefined set of COCO-relevant captions.
     """
-    from phase3_prep import CLIPFeatureExtractor
+    from phase3_common import CLIPFeatureExtractor
     extractor = CLIPFeatureExtractor()
     v_img = extractor.encode_image(img_path)  # [1, 768] normalized
 

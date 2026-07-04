@@ -18,7 +18,7 @@ import matplotlib; matplotlib.use("Agg")
 PROJ = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJ / "scripts"))
 
-from phase3_prep import (
+from phase3_common import (
     CLIPFeatureExtractor, STYLE_CANDIDATES, find_closest_style,
 )
 from phase2_common import (

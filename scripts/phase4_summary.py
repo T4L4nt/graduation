@@ -73,7 +73,6 @@ def main():
         "P2P": "outputs/phase4_sota/p2p/metrics.json",
         "ControlNet": "outputs/phase4_sota/controlnet/metrics.json",
         "Ours_Corr": "outputs/phase2_edict/metrics.json",
-        "Ours_StylePin": "outputs/phase3_prep/style_transfer/metrics.json",
     }
 
     # Common images (coco_val only)
@@ -137,13 +136,6 @@ def main():
                     and r.get("method", "").startswith("DDIM+Corr")
                     and r.get("steps", 50) == 50
                 ]
-            elif method == "Ours_StylePin":
-                candidates = [
-                    r for r in results
-                    if r.get("image") == img_name
-                    and "pin" in str(r.get("lambda", ""))
-                ][:1]  # take first match (usually λ=0.5)
-
             if candidates:
                 best = candidates[0]
                 row[method] = {
@@ -157,7 +149,7 @@ def main():
         table.append(row)
 
     # Print comparison table
-    methods = ["DDIM", "EDICT", "NTI", "P2P", "ControlNet", "Ours_Corr", "Ours_StylePin"]
+    methods = ["DDIM", "EDICT", "NTI", "P2P", "ControlNet", "Ours_Corr"]
     print(f"\n{'='*120}")
     print("SOTA 对比表 (50 steps, coco_val 3 images)")
     print(f"{'Image':<18s}", end="")
@@ -250,10 +242,10 @@ def main():
             avg_l = np.mean(lpips_vals)
             train = {"DDIM": "None", "EDICT": "None", "NTI": "Optimization",
                      "P2P": "None", "ControlNet": "Pre-trained",
-                     "Ours_Corr": "None", "Ours_StylePin": "None"}[method]
+                     "Ours_Corr": "None"}[method]
             mem = {"DDIM": "Low", "EDICT": "2x", "NTI": "Low",
                    "P2P": "~GB (attn maps)", "ControlNet": "~1.4GB (model)",
-                   "Ours_Corr": "Low (~MB)", "Ours_StylePin": "Low (~MB)"}[method]
+                   "Ours_Corr": "Low (~MB)"}[method]
             print(f"| {method} | {avg_p:.2f} | {avg_l:.3f} | {train} | {mem} |")
 
     print(f"\nOutput: {OUT_DIR}")

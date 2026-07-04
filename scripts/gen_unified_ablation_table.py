@@ -169,21 +169,7 @@ def build_table():
                     "Source": source,
                 })
 
-    # 3. Style/pinning from phase3 compare
-    compare = load_json("outputs/phase3_prep/compare/metrics.json")
-    if compare:
-        style_rows = get_style_rows(compare)
-        for config in ["Style Only (no correction)",
-                       "+ Correction + Style",
-                       "Full Framework (+ pinning)"]:
-            if config in style_rows:
-                rows.append({
-                    "Component": config,
-                    "PSNR": style_rows[config]["PSNR"],
-                    "LPIPS": style_rows[config]["LPIPS"],
-                    "ΔPSNR": style_rows[config].get("ΔPSNR"),
-                    "Source": "val (5 imgs)",
-                })
+    # 3. Phase 3 style/pinning — removed (weak contribution)
 
     # 4. Add ResNet vs Attention comparison row
     info_path = Path("outputs/phase4_info_theory/per_layer_correction.json")
