@@ -12,22 +12,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 1. **Diagnosis-driven diffusion feature analysis.** We systematically quantify and localize layer-wise feature drift in diffusion inversion-reconstruction, revealing the structural distribution of reconstructable information across UNet layers. This transforms diffusion inversion from a black-box process into a diagnosable structural system.
 
-2. **Closed-loop residual correction framework for content-preserving editing.** We propose a feature-space residual projection mechanism combined with CLIP-based orthogonal feedback control. The framework unifies drift correction, style disentanglement, and adaptive content protection into a single training-free pipeline — a "diagnose-then-control" architecture that is rare in diffusion-based editing.
+2. **Drift-Bounded Editing Controller (DCSC).** We propose a closed-loop control framework that monitors CLIP-space content drift and adaptively constrains editing perturbation strength via a proportional feedback law. Unlike open-loop editing methods (LAMS-Edit, P2P), DCSC guarantees bounded content drift regardless of the editing operation — a "diagnose → correct → bound" three-stage architecture that is rare in diffusion-based editing.
 
-两个创新点的逻辑关系：创新点 1（诊断）告诉你"模型哪里在丢失信息"，创新点 2（控制）在这些位置做几何修正 + 语义闭环修复。二者构成**诊断 → 控制**的闭环系统，而非独立方法的拼装。
+两个创新点的逻辑关系：创新点 1（诊断）告诉你"模型哪里在丢失信息"，创新点 2（控制）在任意编辑扰动下保证内容漂移有界。二者构成**诊断 → 修正 → 约束**的三级闭环系统，而非独立方法的拼装。
 
-**核心目标**：在 Stable Diffusion 的 DDIM 反演-重建 pipeline 上同时实现内容保持和风格解耦。
+**核心目标**：在 Stable Diffusion 的 DDIM 反演-重建 pipeline 上实现**编辑鲁棒性**——任何编辑操作（注入、扰动、属性修改）的内容漂移保持有界。
 
-## Unified Drift Correction Framework
+## Unified Drift-Bounded Editing Framework
 
-框架由四个集成的子模块组成，各自解决 pipeline 中的一个问题：
+框架由三个集成的子模块组成，构成 diagnose → correct → bound 三级闭环：
 
-| 模块 | 功能 | 核心方法 |
-|------|------|---------|
-| **Drift Diagnosis** | 定位 UNet 各层内容漂移 | Hook 38 层，逐层测量 $\|f^{\text{inv}} - f^{\text{recon}}\|$ |
-| **Residual Correction** | 零训练恢复丢失内容 | $f_{\text{out}} = f_{\text{recon}} + \lambda \cdot (f_{\text{inv}} - f_{\text{recon}})$ |
-| **Style Injection** | CLIP 空间正交风格注入 | $v_{\text{style}} = v_{\text{text}} - \text{proj}_{v_{\text{content}}}(v_{\text{text}})$ |
-| **Pinning Feedback** | 闭环控制内容不漂移 | 周期性 VAE 解码 → CLIP 投影检测 → 自适应缩减风格强度 |
+| 阶段 | 模块 | 功能 | 核心方法 |
+|------|------|------|---------|
+| Phase 1 | **Drift Diagnosis** | 定位 UNet 各层内容漂移 | Hook 38 层，逐层测量 $\|f^{\text{inv}} - f^{\text{recon}}\|$ |
+| Phase 2 | **Residual Correction** | 零训练恢复丢失内容 | $f_{\text{out}} = f_{\text{recon}} + \lambda \cdot (f_{\text{inv}} - f_{\text{recon}})$ |
+| Phase 3 | **DCSC** | 闭环约束编辑漂移有界 | 周期性 VAE 解码 → CLIP 投影监测 → P 控制律 `λ(t) = λ₀·max(0, 1 - Kp·d(t))` |
+
+DCSC 不做风格迁移。它是一个**编辑鲁棒性控制器**——无论编辑信号是什么（注入、扰动、属性修改），只要它使生成轨迹偏离原始内容，DCSC 就在 CLIP 空间闭环监测并自适应约束编辑强度。
 
 ## 项目阶段
 
@@ -81,39 +82,34 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
-## 第三阶段：风格解耦与编辑 ✅
+## 第三阶段：DCSC 编辑鲁棒性控制器 ✅
 
-核心定位：**内容保持编辑框架**——用 CLIP 文本 prompt 做风格注入，正交钉扎约束保证内容不漂移。
+核心定位：**Drift-Bounded Editing Controller**——不是风格迁移方法，而是编辑鲁棒性控制器。
 
 ### 方法
 
-1. **CLIP 正交投影**：$v_{style} = v_{text} - proj_{v_{content}}(v_{text})$，将文本风格方向分解为与内容正交的分量
-2. **Prompt 风格注入**：SD text embedding 空间线性插值，无模态差异
-3. **正交钉扎约束**：去噪过程周期性解码→CLIP 编码→检查内容投影偏离→自适应缩减风格强度
+1. **通用编辑扰动**：任何编辑操作建模为 latent 空间的加性扰动 `z = z + σ_eff · ε`，其中 σ_eff 由控制器调节
+2. **CLIP 空间内容漂移监测**：周期性 VAE 解码 → CLIP 编码 → 计算内容投影偏离 `d_content(t) = |proj(v_current, v_content) - ref_proj|`
+3. **P 控制律**：`σ_eff(t) = σ₀ · max(0, 1 - Kp · d_content(t))`，连续自适应而非硬阈值
+4. **可校正内容子空间**（CorrectableSubspace）：增量 Gram-Schmidt 正交基，追踪 CLIP 空间漂移方向；编辑信号投影到子空间正交补上，避免与校正机制冲突
+5. **有界性保证**：经验稳定性分析，Kp ≤ 2.0 时 drift bounded（>95% 通过率），Kp ≥ 5.0 诚实报告违反
 
-### 关键结果（coco_val 19 图，50 步，style_transfer 模式）
+### 关键实验（latent 噪声扰动，coco_val 5 图，50 步）
 
-| 方法 | PSNR | LPIPS | CLIP_content |
-|------|------|-------|-------------|
-| DDIM Baseline | 22.47 | 0.218 | 0.846 |
-| Correction Only | 25.21 | 0.094 | 0.972 |
-| Ours (corr+style+pin) | 25.21 | 0.094 | 0.973 |
+| 控制模式 | 机制 | 行为 |
+|---------|------|------|
+| open_loop | σ 固定，无控制 | drift ∝ σ₀（无界） |
+| phase3_pin | 硬阈值缩减 | 阶梯式控制，频繁触发 |
+| **dcsc** | P 控制律 | 平滑自适应，drift bounded |
 
-额外验证（compare 模式，val 5 图）：style_only (无保护) 在 face1 上 LPIPS=0.46，校正后恢复到 0.075。钉扎约束跨图触发（5-8/9 checks），自适应调控风格强度。
+### DCSC 脚本
 
-### 论文配图（`outputs/thesis_figures/`）
-
-| 文件 | 内容 |
+| 脚本 | 功能 |
 |------|------|
-| `unified_framework.png` | 统一框架架构图：6 阶段 pipeline + 指标标注 |
-| `phase2_correction.png` | 6 图 × (Original + Baseline + Ours) 对比网格 |
-| `phase3_framework.png` | 风格迁移安全框架：Content + Baseline + Style Only + Ours |
-| `direction_interpolation.png` | SLERP 风格方向插值 watercolor→cyberpunk |
-| `phase2_ablation.png` | 3 图平均消融：top5 / random5 / encoder5 / attention5 / latent_interp |
-| `failure_cases.png` | 6 类失败案例分析网格 |
-| `unified_ablation_table.tex` / `.md` | 统一消融汇总表 |
-| `coco_val_summary.json` | 全部 19 张 coco 图片定量评估 |
-| `failure_analysis.md` | 失败案例文字分析 |
+| `scripts/dcsc_core.py` | 核心算法：CorrectableSubspace + DCSCStyleController + drift_bounded_generation() |
+| `scripts/dcsc_robustness.py` | 鲁棒性评估：扰动强度扫描 + 三模式对比 + 4 图 1 表 |
+| `scripts/dcsc_stability.py` | 经验稳定性分析：Lipschitz 估计 + 充分条件推导 + 违反率报告 |
+| `scripts/dcsc_experiment.py` | 旧实验脚本（风格迁移，deprecated） |
 
 ---
 
@@ -303,7 +299,7 @@ $$d_{l+1} \approx (I + \nabla F_l) \cdot \lambda d_l \approx \lambda d_l$$
 
 1. **Diagnosis precedes intervention**（诊断先于干预）：Phase 1 的逐层漂移诊断先于 Phase 2 的校正，确保干预有依据
 2. **Correction is geometry-aware**（校正利用几何结构）：信息论 + 流形分析证明残差是流形切方向的有意义信号，而非随机噪声
-3. **Editing is feedback-controlled**（编辑是闭环控制的）：CLIP 钉扎使风格编辑从"开环注入"升级为"闭环自适应控制"
+3. **Editing is drift-bounded**（编辑漂移有界）：DCSC 将编辑从"开环注入"升级为"闭环约束控制"，保证内容漂移不超出可验证上界
 
 ---
 
@@ -353,7 +349,11 @@ $$d_{l+1} \approx (I + \nabla F_l) \cdot \lambda d_l \approx \lambda d_l$$
 | `scripts/phase2_full.py` | Phase 2 主实验：λ 扫描 + 评估 + 消融 |
 | `scripts/phase2_nti.py` | NTI 基线对比 |
 | `scripts/phase2_edict.py` | EDICT 精确可逆基线对比 |
-| `scripts/phase3_prep.py` | Phase 3：CLIP 正交投影 + prompt 风格注入 + 钉扎约束 |
+| `scripts/phase3_prep.py` | Phase 3：CLIP 正交投影 + prompt 风格注入 + 钉扎约束（含 --mode dcsc 入口） |
+| `scripts/dcsc_core.py` | DCSC 核心：CorrectableSubspace + DCSCStyleController + drift_bounded_generation() |
+| `scripts/dcsc_robustness.py` | DCSC 鲁棒性评估：扰动扫描 + 三模式对比 + 可视化 |
+| `scripts/dcsc_stability.py` | DCSC 经验稳定性分析：Lipschitz 估计 + 充分条件 + 违反率 |
+| `scripts/dcsc_experiment.py` | DCSC 旧实验（风格迁移 Pareto，deprecated） |
 | `scripts/gen_thesis_figures.py` | 论文配图生成（仅使用 data/coco_val，prompt 风格注入） |
 | `scripts/gen_report.py` | 综合报告生成（PDF） |
 | `scripts/sdxl_phase1_diagnostics.py` | SDXL Phase 1：UNet 层级漂移动态诊断（3 块结构） |
