@@ -345,6 +345,93 @@ def generate_ablation_figure(pipe, lpips_fn):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# DCSC Figure: Pareto Frontier + Control Trajectory + Stability
+# ═══════════════════════════════════════════════════════════════════════════
+
+def generate_dcsc_figure(pipe, lpips_fn):
+    """Thesis Figure: DCSC closed-loop style controller.
+
+    Generates 3-panel figure:
+      1. Pareto frontier (CLIP_style vs CLIP_content) for all methods
+      2. Control trajectory (lambda, d_content, basis over steps)
+      3. Stability bound verification
+    """
+    from dcsc_experiment import (
+        compare_across_methods, compute_pareto_frontier,
+        plot_pareto_frontier, generate_comparison_table,
+    )
+    from dcsc_stability import (
+        estimate_lipschitz_constant, verify_bounded_drift,
+        plot_drift_bounds, plot_contraction_factors,
+    )
+
+    print("\n" + "=" * 60)
+    print("DCSC Figure: Pareto + Control + Stability")
+    print("=" * 60)
+
+    extractor = CLIPFeatureExtractor()
+    corr_layers = get_top_drift_layers(5)
+
+    # Use 5 coco_val images for Pareto scan
+    pareto_images = [
+        "data/coco_val/coco_000000000139.jpg",
+        "data/coco_val/coco_000000000285.jpg",
+        "data/coco_val/coco_000000000632.jpg",
+        "data/coco_val/coco_000000000724.jpg",
+        "data/coco_val/coco_000000000776.jpg",
+    ]
+    pareto_images = [p for p in pareto_images if os.path.exists(p)]
+
+    out_dir = OUT_DIR / "dcsc"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # ---- Panel 1: Pareto Frontier ----
+    print("\n[Panel 1] Pareto frontier comparison...")
+    compare_results = compare_across_methods(
+        pipe, pareto_images, extractor,
+        num_steps=50, corr_lam=0.5, corr_layers=corr_layers,
+        lpips_fn=lpips_fn,
+        dcsc_Kp=1.0, dcsc_lambda_0=0.5,
+    )
+    plot_pareto_frontier(
+        compare_results,
+        str(out_dir / "dcsc_pareto.png"),
+        title="DCSC: Style-Content Pareto Frontier")
+    generate_comparison_table(
+        compare_results, str(out_dir / "dcsc_comparison.tex"))
+
+    # Print per-method averages
+    print("  Method averages:")
+    for method in ["DDIM", "Correction", "DCSC"]:
+        entries = compare_results.get(method, [])
+        if entries:
+            import numpy as np
+            psnr = np.mean([e["PSNR"] for e in entries])
+            cs = np.mean([e.get("CLIP_style", 0) for e in entries])
+            cc = np.mean([e.get("CLIP_content", 0) for e in entries])
+            print(f"    {method:15s}: PSNR={psnr:.2f} CLIP_s={cs:.3f} CLIP_c={cc:.3f}")
+
+    # ---- Panel 2: Stability Verification ----
+    print("\n[Panel 2] Stability bound verification...")
+    L = estimate_lipschitz_constant(extractor, pipe, pareto_images[:3], n_pairs=30)
+    bound_results = verify_bounded_drift(
+        pipe, pareto_images[:3], extractor,
+        num_steps=50, corr_lam=0.5,
+        Kp_values=[0.5, 1.0, 2.0, 5.0],
+        lambda_0_values=[0.3, 0.5, 0.7],
+        control_freq=5, lpips_fn=lpips_fn, L_estimate=L,
+    )
+    stability_out = out_dir / "stability"
+    stability_out.mkdir(exist_ok=True)
+    plot_drift_bounds(bound_results, str(stability_out / "drift_bounds.png"))
+    plot_contraction_factors(bound_results, str(stability_out / "bound_tightness.png"))
+
+    print(f"\n  L_estimate={L:.4f}")
+    print(f"  Bound pass rate: {bound_results['pass_rate']:.1%}")
+    print(f"  Output: {out_dir}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # User Study Materials
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -601,6 +688,8 @@ def main():
         generate_phase3_figure(pipe, lpips_fn)
         generate_direction_figure(pipe, lpips_fn)
         generate_ablation_figure(pipe, lpips_fn)
+        if args.mode == "all":
+            generate_dcsc_figure(pipe, lpips_fn)  # DCSC figures (Pareto + control + stability)
 
     if args.mode in ("all", "user_study"):
         generate_user_study_pairs(pipe, lpips_fn)
