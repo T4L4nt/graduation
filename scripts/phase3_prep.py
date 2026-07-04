@@ -1098,141 +1098,17 @@ def mode_style_transfer(args):
     print(f"\n输出: {out_dir}")
 
 
-# =========================================================================
-# DCSC mode
-# =========================================================================
-
-def mode_dcsc(args):
-    """DCSC: Drift-Aware Closed-Loop Style Controller.
-
-    Runs Pareto scan over (Kp, lambda_0) and compares with Phase 3 pinning.
-    """
-    from dcsc_experiment import (
-        pareto_scan, compare_across_methods, compute_pareto_frontier,
-        plot_pareto_frontier, generate_comparison_table,
-    )
-    import lpips
-
-    print("=" * 60)
-    print("DCSC: Drift-Aware Closed-Loop Style Controller")
-    print("=" * 60)
-
-    # Determine images
-    if args.image:
-        import glob as _glob
-        images = sorted(_glob.glob(args.image))
-        if not images:
-            print(f"[ERROR] No images found: {args.image}"); return
-    else:
-        coco = sorted(Path("data/coco_val").glob("*.jpg"))
-        images = [str(p) for p in coco[:5]]
-    print(f"Images: {len(images)}")
-
-    # Load
-    pipe = load_pipeline()
-    extractor = CLIPFeatureExtractor()
-    lpips_fn = lpips.LPIPS(net="alex").to(DEVICE) if not args.skip_lpips else None
-    corr_layers = get_top_drift_layers(5)
-
-    # Style definition: EXTERNAL text target
-    style_text = getattr(args, "style_text", "an oil painting in impressionist style")
-    v_content = extractor.encode_text("a photo")
-
-    # Get Kp and lambda_0 values from CLI or defaults
-    Kp_values = list(getattr(args, "Kp", [0.5, 1.0, 2.0, 5.0]))
-    lambda_0_values = list(getattr(args, "lambda_0", [0.3, 0.5, 0.7]))
-    control_freq = getattr(args, "control_freq", 5)
-    dcsc_Kp_opt = getattr(args, "dcsc_Kp_opt", 1.0)
-    dcsc_lam_opt = getattr(args, "dcsc_lam_opt", 0.5)
-
-    print(f"Style target: '{style_text}'")
-    print(f"Kp values: {Kp_values}")
-    print(f"lambda_0 values: {lambda_0_values}")
-    print(f"control_freq: {control_freq}")
-
-    out_dir = OUT_DIR / "dcsc"
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    # ---- Pareto scan ----
-    print(f"\n[1] Pareto scan...")
-    results = pareto_scan(
-        pipe, images, extractor, style_text, v_content,
-        num_steps=args.steps, corr_lam=0.5, corr_layers=corr_layers,
-        Kp_values=Kp_values, lambda_0_values=lambda_0_values,
-        control_freq=control_freq, lpips_fn=lpips_fn,
-    )
-
-    # Find Pareto-optimal points
-    pareto = compute_pareto_frontier(results)
-    print(f"\n[Pareto] {len(pareto)} non-dominated points:")
-    for p in pareto:
-        print(f"  Kp={p['Kp']:.1f} λ_0={p['lambda_0']:.2f}  "
-              f"PSNR={p['PSNR']:.2f}  CLIP_s={p['CLIP_style']:.3f}  "
-              f"CLIP_c={p['CLIP_content']:.3f}")
-
-    # Plot Pareto
-    plot_pareto_frontier(
-        {"DCSC": results},
-        str(out_dir / "pareto_frontier.png"),
-        title=f"DCSC Pareto Frontier ({len(images)} images)")
-
-    # ---- Cross-method comparison ----
-    print(f"\n[2] Cross-method comparison at optimal DCSC params...")
-    compare_results = compare_across_methods(
-        pipe, images, extractor, style_text, v_content,
-        num_steps=args.steps, corr_lam=0.5, corr_layers=corr_layers,
-        lpips_fn=lpips_fn,
-        dcsc_Kp=dcsc_Kp_opt, dcsc_lambda_0=dcsc_lam_opt,
-    )
-
-    # Plot comparison
-    plot_pareto_frontier(
-        compare_results,
-        str(out_dir / "comparison_pareto.png"),
-        title=f"Style-Content Pareto Frontier ({len(images)} images)")
-    generate_comparison_table(
-        compare_results, str(out_dir / "comparison_table.tex"))
-
-    # Print summary
-    print("\n" + "=" * 60)
-    print("DCSC Summary")
-    print("=" * 60)
-    for method in ["DDIM", "Correction", "StyleOnly", "Phase3_Pinning", "DCSC"]:
-        entries = compare_results.get(method, [])
-        if not entries:
-            continue
-        psnr = np.mean([e["PSNR"] for e in entries])
-        lpips_v = np.mean([e.get("LPIPS", 0) for e in entries])
-        cs = np.mean([e.get("CLIP_style", 0) for e in entries])
-        cc = np.mean([e.get("CLIP_content", 0) for e in entries])
-        print(f"  {method:20s}: PSNR={psnr:.2f} LPIPS={lpips_v:.3f}  "
-              f"CLIP_s={cs:.3f} CLIP_c={cc:.3f}")
-
-    print(f"\nOutput: {out_dir}")
-
 
 def main():
     parser = argparse.ArgumentParser(description="Phase 3 Prep: Style Decoupling Prototype")
     parser.add_argument("--mode", type=str, default="full",
-                        choices=["clip", "injection", "full", "ablation", "style_transfer", "compare", "direction", "dcsc"])
+                        choices=["clip", "injection", "full", "ablation", "style_transfer", "compare", "direction"])
     parser.add_argument("--image", type=str, default=None,
                         help="单张内容图路径或 glob 模式（如 data/coco_val/*.jpg）")
     parser.add_argument("--style-ref", type=str, default=None,
                         help="风格参考图路径（如 data/watercolor.jpeg）")
     parser.add_argument("--steps", type=int, default=50)
     parser.add_argument("--strength", type=float, nargs="+", default=[0.3, 0.5, 0.7])
-    parser.add_argument("--Kp", type=float, nargs="+", default=[0.5, 1.0, 2.0, 5.0],
-                        help="DCSC: proportional gain values for Pareto scan")
-    parser.add_argument("--lambda-0", type=float, nargs="+", default=[0.3, 0.5, 0.7],
-                        help="DCSC: base style strength values")
-    parser.add_argument("--control-freq", type=int, default=5,
-                        help="DCSC: control frequency (steps between updates)")
-    parser.add_argument("--dcsc-Kp-opt", type=float, default=1.0,
-                        help="DCSC: optimal Kp for cross-method comparison")
-    parser.add_argument("--dcsc-lam-opt", type=float, default=0.5,
-                        help="DCSC: optimal lambda_0 for cross-method comparison")
-    parser.add_argument("--style-text", type=str, default="an oil painting in impressionist style",
-                        help="DCSC: external style target text prompt")
     parser.add_argument("--skip-lpips", action="store_true")
     args = parser.parse_args()
 
@@ -1243,7 +1119,6 @@ def main():
     elif args.mode == "style_transfer": mode_style_transfer(args)
     elif args.mode == "compare": mode_compare(args)
     elif args.mode == "direction": mode_direction(args)
-    elif args.mode == "dcsc": mode_dcsc(args)
 
 
 if __name__ == "__main__":
