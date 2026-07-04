@@ -27,7 +27,7 @@ from phase2_common import (
     compute_metrics, save_recon_img, make_grid_image,
     get_top_drift_layers, get_drift_weights,
 )
-from phase3_common import (
+from clip_utils import (
     CLIPFeatureExtractor, build_style_cross_attn_tokens,
     StyleFeatureInjector,
 )
@@ -70,7 +70,7 @@ def run_correction(pipe, lat, ten, prompt_embeds, layers, weights):
 def run_style_pin(pipe, lat, ten, prompt_embeds, styled_embeds,
                    layers, weights, extractor, v_content, v_style):
     """Phase 3: correction + style + pinning."""
-    from phase3_common import run_correction_with_style_and_pinning
+    from clip_utils import run_correction_with_style_and_pinning
 
     noise, saved = ddim_inversion_with_features(
         pipe, lat, prompt_embeds, STEPS, layers)

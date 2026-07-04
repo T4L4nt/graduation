@@ -17,7 +17,7 @@ from phase2_common import (DEVICE, DTYPE, load_pipeline, load_image, decode_late
     ddim_inversion, ddim_reconstruction, ddim_inversion_with_features,
     ddim_reconstruction_with_correction, FeatureCorrector,
     compute_metrics, save_recon_img, make_grid_image, get_top_drift_layers)
-from phase3_common import (CLIPFeatureExtractor, build_style_cross_attn_tokens,
+from clip_utils import (CLIPFeatureExtractor, build_style_cross_attn_tokens,
     run_baseline, run_correction_with_style, run_correction_with_style_and_pinning,
     run_correction_only, slerp, make_styled_prompt_embedding)
 

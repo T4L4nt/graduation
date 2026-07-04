@@ -30,7 +30,7 @@ from phase2_common import (
     ddim_inversion, compute_metrics, save_recon_img,
     get_top_drift_layers,
 )
-from phase3_common import CLIPFeatureExtractor, find_closest_style, STYLE_CANDIDATES
+from clip_utils import CLIPFeatureExtractor, find_closest_style, STYLE_CANDIDATES
 
 OUT_DIR = Path("outputs/phase4_sota/p2p")
 
