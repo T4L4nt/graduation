@@ -104,9 +104,9 @@ def main():
     ax.axis("off")
 
     # ---- Title ----
-    ax.text(8, 9.6, "Unified Drift Correction Framework",
+    ax.text(8, 9.6, "Diagnosis-Driven Drift Correction Framework",
             ha="center", fontsize=18, fontweight="bold", color=C_DARK)
-    ax.text(8, 9.15, "Diagnosis-Driven   ·   Geometry-Aware   ·   Feedback-Controlled",
+    ax.text(8, 9.15, "Diagnosis-Driven   ·   Geometry-Aware   ·   Multi-Perspective",
             ha="center", fontsize=10, color="#7F8C8D", style="italic")
 
     # ---- Stage boxes (x-center, y-center, width, height) ----

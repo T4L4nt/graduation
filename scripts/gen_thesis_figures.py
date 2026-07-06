@@ -568,13 +568,188 @@ def generate_summary(pipe, lpips_fn):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Phase 5: Data-driven summary figures (no model inference, from existing JSON)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def generate_phase5_data_figures():
+    """Generate thesis-ready summary figures from Phase 5 experimental data.
+    No model inference — reads existing JSON outputs."""
+    import numpy as np
+    import matplotlib; matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    print("\n" + "=" * 60)
+    print("Phase 5 Data Figures: SOTA table, step robustness, P2P parity")
+    print("=" * 60)
+
+    # --- Load Phase 5 summary ---
+    p5_path = Path("outputs/phase5_final/final_summary.json")
+    if not p5_path.exists():
+        print("  [SKIP] Phase 5 summary not found — run phase5_final_comparison.py first")
+        return
+
+    with open(p5_path) as f:
+        p5_data = json.load(f)
+
+    summaries = p5_data["summaries"]
+
+    # --- Figure A: Step count robustness curve ---
+    # Data from Phase 2 full (step sweep)
+    step_data = {
+        4:  {"ddim": 17.02, "corr": 18.73, "delta": 1.72},
+        10: {"ddim": 17.19, "corr": 21.66, "delta": 4.47},
+        20: {"ddim": 19.24, "corr": 23.89, "delta": 4.65},
+        50: {"ddim": 22.45, "corr": 25.20, "delta": 2.75},
+        100: {"ddim": 23.63, "corr": 25.44, "delta": 1.81},
+    }
+    steps = sorted(step_data.keys())
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
+
+    # Left: PSNR curves
+    ax = axes[0]
+    ax.plot(steps, [step_data[s]["ddim"] for s in steps], "o-", color="#888888",
+            linewidth=2, markersize=8, label="DDIM Baseline")
+    ax.plot(steps, [step_data[s]["corr"] for s in steps], "s-", color="#2ecc71",
+            linewidth=2, markersize=8, label="DDIM + ResCorr (Ours)")
+    ax.fill_between(steps, [step_data[s]["ddim"] for s in steps],
+                    [step_data[s]["corr"] for s in steps],
+                    alpha=0.15, color="#2ecc71")
+    ax.set_xlabel("DDIM Steps", fontsize=13)
+    ax.set_ylabel("PSNR (dB)", fontsize=13)
+    ax.set_title("PSNR vs DDIM Steps (19 coco_val)", fontsize=14, fontweight="bold")
+    ax.legend(fontsize=11)
+    ax.grid(alpha=0.3)
+
+    # Right: Delta curve
+    ax = axes[1]
+    deltas = [step_data[s]["delta"] for s in steps]
+    ax.fill_between(steps, deltas, alpha=0.3, color="#3498db")
+    ax.plot(steps, deltas, "o-", color="#2980b9", linewidth=2.5, markersize=10,
+            markerfacecolor="white", markeredgewidth=2)
+    ax.axhline(y=0, color="black", linewidth=0.5)
+    # Mark optimal
+    best_step = max(steps, key=lambda s: step_data[s]["delta"])
+    ax.annotate(f"Best: {best_step} steps\n(Δ={step_data[best_step]['delta']:+.1f} dB)",
+                xy=(best_step, step_data[best_step]["delta"]),
+                xytext=(best_step + 15, step_data[best_step]["delta"] + 0.3),
+                arrowprops=dict(arrowstyle="->", color="#e74c3c"),
+                fontsize=11, fontweight="bold", color="#e74c3c")
+    ax.set_xlabel("DDIM Steps", fontsize=13)
+    ax.set_ylabel("ΔPSNR (Corr − Baseline, dB)", fontsize=13)
+    ax.set_title("Correction Benefit vs Steps", fontsize=14, fontweight="bold")
+    ax.grid(alpha=0.3)
+
+    plt.tight_layout()
+    fig.savefig(OUT_DIR / "step_robustness.png", dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  -> {OUT_DIR / 'step_robustness.png'}")
+
+    # --- Figure B: SOTA comparison bar chart (stylized for thesis) ---
+    methods = ["DDIM", "NTI", "EDICT", "P2P", "Ours_Corr"]
+    labels = ["DDIM\n(baseline)", "NTI\n(BLIP)", "EDICT", "P2P\n(cross-attn)", "Ours\nResCorr"]
+    colors = ["#bdc3c7", "#e74c3c", "#f39c12", "#3498db", "#27ae60"]
+
+    means = [summaries[m]["PSNR"]["mean"] for m in methods]
+    stds = [summaries[m]["PSNR"]["std"] for m in methods]
+    ddim_mean = means[0]
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    bars = ax.bar(labels, means, yerr=stds, color=colors, capsize=6,
+                  alpha=0.92, edgecolor="white", linewidth=0.8, width=0.6)
+
+    ax.set_ylabel("PSNR (dB)", fontsize=14)
+    ax.set_title("Content Preservation on COCO val2017 (50 DDIM steps, n=19)",
+                 fontsize=15, fontweight="bold")
+    ax.grid(axis="y", alpha=0.25, linewidth=0.5)
+
+    for i, (bar, mean) in enumerate(zip(bars, means)):
+        if i == 0:
+            continue
+        delta = mean - ddim_mean
+        ax.annotate(f"$\\Delta$={delta:+.1f} dB",
+                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                    xytext=(0, 6), textcoords="offset points",
+                    ha="center", fontsize=11, fontweight="bold")
+
+    # P2P vs Ours annotation
+    p2p_m = means[3]
+    ours_m = means[4]
+    ax.annotate(f"P2P − Ours = {p2p_m - ours_m:+.2f} dB\n(Cohen's d < 0.05)",
+                xy=(3.5, max(p2p_m, ours_m)),
+                fontsize=10, ha="center",
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="#fff9c4", alpha=0.9))
+
+    plt.tight_layout()
+    fig.savefig(OUT_DIR / "sota_barchart_thesis.png", dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  -> {OUT_DIR / 'sota_barchart_thesis.png'}")
+
+    # --- Figure C: Per-image P2P vs Ours correlation ---
+    per_img = p5_data["per_image"]
+    p2p_vals = [per_img[img]["P2P"] for img in sorted(per_img.keys())]
+    ours_vals = [per_img[img]["Ours_Corr"] for img in sorted(per_img.keys())]
+
+    fig, ax = plt.subplots(figsize=(7.5, 7))
+    ax.scatter(p2p_vals, ours_vals, c="#2ecc71", s=80, alpha=0.85,
+               edgecolors="white", linewidth=0.8, zorder=5)
+
+    lim_min = min(min(p2p_vals), min(ours_vals)) - 1
+    lim_max = max(max(p2p_vals), max(ours_vals)) + 1
+    ax.plot([lim_min, lim_max], [lim_min, lim_max], "k--", alpha=0.25,
+            linewidth=1, label="y = x (equal performance)", zorder=1)
+
+    r_val = np.corrcoef(p2p_vals, ours_vals)[0, 1]
+    ax.text(0.05, 0.95, f"Pearson r = {r_val:.4f}\nMean diff = {np.mean(p2p_vals)-np.mean(ours_vals):+.2f} dB",
+            transform=ax.transAxes, fontsize=12, verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.85))
+
+    ax.set_xlabel("P2P Cross-Attention PSNR (dB)", fontsize=13)
+    ax.set_ylabel("Ours ResCorr PSNR (dB)", fontsize=13)
+    ax.set_title("Per-Image: P2P vs Ours (n=19)", fontsize=14, fontweight="bold")
+    ax.legend(loc="lower right", fontsize=10)
+    ax.grid(alpha=0.2)
+
+    plt.tight_layout()
+    fig.savefig(OUT_DIR / "p2p_vs_ours_thesis.png", dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  -> {OUT_DIR / 'p2p_vs_ours_thesis.png'} (r={r_val:.4f})")
+
+    # --- Save updated summary JSON ---
+    # Merge Phase 5 stats with summary format
+    thesis_summary = {
+        "dataset": "coco_val",
+        "n_images": 19,
+        "steps": 50,
+        "sota_comparison": {
+            m: {
+                "PSNR": f"{summaries[m]['PSNR']['mean']:.2f} ± {summaries[m]['PSNR']['std']:.2f}",
+                "SSIM": f"{summaries[m]['SSIM']['mean']:.3f} ± {summaries[m]['SSIM']['std']:.3f}",
+                "LPIPS": f"{summaries[m]['LPIPS']['mean']:.3f} ± {summaries[m]['LPIPS']['std']:.3f}",
+            }
+            for m in methods if m in summaries
+        },
+        "step_robustness": step_data,
+        "statistical_tests": {
+            "p2p_vs_ours_ttest_p": 0.0015,
+            "p2p_vs_ours_cohens_d": 0.033,
+            "interpretation": "P2P has statistically detectable but practically negligible advantage (0.13 dB, Cohen's d=0.033 << 0.2 threshold for small effect)",
+            "p2p_ours_pearson_r": round(float(r_val), 4),
+        },
+    }
+    with open(OUT_DIR / "thesis_summary.json", "w") as f:
+        json.dump(thesis_summary, f, indent=2)
+    print(f"  -> {OUT_DIR / 'thesis_summary.json'}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Main
 # ═══════════════════════════════════════════════════════════════════════════
 
 def main():
     parser = argparse.ArgumentParser(description="Generate thesis figures and user study materials")
     parser.add_argument("--mode", type=str, default="all",
-                        choices=["all", "figures", "user_study", "summary", "cleanup"])
+                        choices=["all", "figures", "user_study", "summary", "phase5", "cleanup"])
     parser.add_argument("--skip-lpips", action="store_true")
     args = parser.parse_args()
 
@@ -588,6 +763,13 @@ def main():
                 print(f"  {d}: {count} files")
         return
 
+    # Phase 5: data-only figures, no model needed
+    if args.mode == "phase5":
+        generate_phase5_data_figures()
+        print(f"\nDone. Output: {OUT_DIR.resolve()}")
+        return
+
+    # All other modes need the model
     print("[0] Loading model...")
     pipe = load_pipeline()
 
@@ -608,6 +790,9 @@ def main():
 
     if args.mode in ("all", "summary"):
         generate_summary(pipe, lpips_fn)
+
+    if args.mode in ("all", "phase5"):
+        generate_phase5_data_figures()
 
     print(f"\nDone. Output: {OUT_DIR.resolve()}")
 

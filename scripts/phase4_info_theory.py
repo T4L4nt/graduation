@@ -1,16 +1,17 @@
 """
-Phase 4 信息论分析：逐层校正收益量化
+Phase 4 逐层边际校正分析（Causal Ablation / Marginal Correction Analysis）
 
-核心问题：为何 ResNet 特征携带可校正信息？
+核心问题：哪些层的残差携带可恢复的图像信息？
 
 方法：逐层单独校正（per-layer marginal correction）
 - 对每层单独运行：DDIM 反演 → 仅在该层注入残差校正 → 重建
-- ΔPSNR = 该层的"可校正信息含量"
+- ΔPSNR = 该层残差信号对重建质量的边际贡献（因果干预指标）
 - 对比 ResNet vs Attention 的 ΔPSNR
 - 对比 ΔPSNR 与 Phase 1 漂移的相关性
 
-这直接测量了信息论关心的量：该层残差信号对重建质量的边际贡献。
-不需要回归、不需要 MI 估计——实验直接给出答案。
+这是因果消融实验（causal ablation），而非信息论分析。
+通过逐层介入测量每层残差的因果效应。ΔPSNR 是因果代理指标，
+不是互信息。正式的互信息估计见 phase4_mi_estimation.py。
 
 用法:
   python scripts/phase4_info_theory.py --quick        # 3 图快速验证
@@ -420,21 +421,21 @@ def print_report(results, baselines):
     print("INTERPRETATION")
     print(f"{'='*70}")
     print("""
-本实验直接测量了每层残差信号的"可校正信息含量"——在该层单独注入校正后
-的 PSNR 提升。ΔPSNR 是 I(f_residual; X_original) 的因果代理指标。
+本实验通过因果消融（causal ablation）测量每层残差信号的边际贡献。
+ΔPSNR 度量的是：仅在该层注入校正时，重建质量的因果改善。
 
 关键发现：
-1. ResNet 层的可校正信息是 Attention 层的 2.1 倍
-   → ResNet 残差携带显著更多的像素级信息
+1. ResNet 层的边际贡献是 Attention 层的 2.1 倍
+   → ResNet 残差携带显著更多的像素级可恢复信息
    → 校正注入 ResNet 层效果最好（与 Phase 2 消融一致）
 
-2. 最高可校正信息集中在两个区域：
+2. 最高边际贡献集中在两个区域：
    - 浅层 encoder (down_blocks.0): 最接近输入，保留最多像素细节
    - 深层 decoder (up_blocks.2, up_blocks.3): 空间分辨率最高
    → Top-5 全部是 ResNet；Bottom-5 全部是 Attention
 
 3. up_blocks.0.attentions.0 的 ΔPSNR 恰好为 0.00（19 图全零）
-   → 该 Attention 层残差与像素重建完全正交
+   → 该 Attention 层残差对像素重建的因果效应为零
    → Attention 编码空间关系信息，不是像素值
 
 4. ΔPSNR 与 Phase 1 漂移弱负相关 (r ≈ -0.11)
@@ -442,11 +443,13 @@ def print_report(results, baselines):
    → 诊断的价值在于揭示架构瓶颈，而非选择最优注入层
    → 与 Phase 2 消融发现一致（random5 ≈ top5，漂移加权无效）
 
-5. 信息论解释：
-   - 可校正信息 I(f_inv - f_recon; X) 集中在 ResNet 层
-   - ResNet 的空间归纳偏置保留像素级可恢复信息
-   - Attention 的空间混合破坏了像素级信息定位
-   - 残差校正是从 ResNet 特征中提取未恢复的图像信息的有效机制
+5. 与互信息估计的关系：
+   - 本实验是因果消融（causal ablation），测量的是干预效应
+   - phase4_mi_estimation.py 是真正的信息论分析，估计 I(f_inv; f_recon)
+   - 两者互补：因果效应 × 信息保持 = 完整的诊断视角
+
+注意：本脚本报告中的 ΔPSNR 不可解释为"互信息"或"熵"等
+信息论量。它是因果干预下的行为指标（behavioral metric under intervention）。
 """)
 
 
