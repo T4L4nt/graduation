@@ -226,6 +226,8 @@ What → Why → How 三章递进：
 
 **反演方法**：DDIM → EDICT → NTI
 
-**内容保持**：LAMS-Edit（最接近，开环混合）→ Prompt-to-Prompt（交叉注意力）→ DiffStateGrad（SVD 低秩）
+**内容保持**：
+- **RLI (Residual Linear Interpolation)**：Jo et al., ICCVW 2025。在 self-attention 层做线性残差插值以稳定 editing。数学形式上与我们的校正公式等价，但存在本质差异：(1) RLI 经验驱动（凭直觉选 attention 层），我们诊断驱动（逐层量化 196 层后定位 ResNet bottleneck）；(2) RLI 面向 editing artifacts 平滑，我们面向 inversion-reconstruction 不一致性的系统校正；(3) RLI 无理论分析，我们有三视角互补框架；(4) RLI 仅覆盖 UNet 架构（SD 1.4/2.0/2.1/SDXL），我们覆盖 DiT（Transformer 架构）。RLI 的经验发现实际上支持了我们的核心论点——线性插值在特征校正中是有效的，但只有诊断才能定位最优注入位置并解释为什么。
+- **LAMS-Edit**（最接近，开环混合）→ **Prompt-to-Prompt**（交叉注意力）→ **DiffStateGrad**（SVD 低秩）
 
-**差异化定位**：诊断驱动 + 理论闭环 + 跨架构验证 + 内存优势 + 统计等价于 P2P。不是新方法，是新认识。
+**差异化定位**：诊断驱动 + 理论闭环 + 跨架构验证 + 内存优势 + 统计等价于 P2P。线性插值不是我们的发明——RLI 已独立发现类似形式——我们的贡献是**诊断→定位→极简干预**这个范式：一旦通过逐层诊断定位了架构瓶颈，最简线性校正即可达到复杂方法的同等效果。简单性是诊断的必然结果，而非调参的偶然发现。
