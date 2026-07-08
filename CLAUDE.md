@@ -4,29 +4,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-硕士毕业设计：**诊断驱动的扩散模型反演特征漂移分析与零训练校正**。作者为塔拉尼提·居马努尔。
+硕士毕业设计：**扩散反演特征漂移的架构指纹——发现、理解与利用**。作者为塔拉尼提·居马努尔。
 
-**核心贡献**：
+**核心贡献：Architecture Fingerprint of Feature Drift**
 
-1. **Diagnosis-driven diffusion feature analysis.** 系统量化并定位 DDIM 反演-重建过程中的逐层特征漂移，揭示 UNet 各层的信息分工结构（ResNet vs Attention，encoder vs decoder vs bottleneck）。将扩散反演从黑盒过程转变为可诊断的结构系统。
+发现扩散反演中的特征漂移具有清晰的**架构级结构**——漂移模式由 backbone 的 attention 拓扑决定，而非采样器 artifact。跨 SD 1.5 / SDXL / HunyuanDiT / FLUX 四种架构和 DDIM / Flow Matching 两种范式统一量化：同 backbone 架构间漂移分布高度相似（FLUX vs HunyuanDiT Pearson r=0.727），不同 backbone 间显著分化（FLUX vs SD 1.5 r=0.486）。漂移指纹可从架构的 (a) 信息流图、(b) skip/residual 结构、(c) 跨模态交互边界三要素预测。
 
-2. **Theoretical understanding of feature drift.** 三理论互补框架：信息论（因果消融 + 互信息估计）、流形几何（残差的切空间对齐）、收敛性分析（skip connection 传播与误差收缩）。三个理论从不同角度解释同一现象，相互印证。
+**理论解释**：信息论（因果消融 + 互信息估计）解释漂移为何集中在特定层类型——ResNet 残差包含的可恢复信息显著多于 Attention（ΔPSNR 2.1×），且该差异不由特征方差驱动（MI 比率仅 1.1×）。流形分析与收敛性推导作为补充视角。
 
-3. **Minimal correction with cross-architecture validation.** 基于诊断结果的最简残差校正机制，跨 SD 1.5 / SDXL / HunyuanDiT / FLUX 四种架构两种采样范式验证有效。与 P2P 内容保持能力统计等价（19 图，ΔPSNR 差 0.13 dB，Cohen's d=0.033），内存低数百倍。
+**工程推论——最简校正是诊断充分的自然结果**：一旦通过逐层诊断定位架构瓶颈，最简 latent 线性校正即可达到复杂方法的同等效果。与 P2P 统计等价（Cohen's d=0.033），内存低数百倍。刻意复杂化（feature-level 注入、文本 token 残差、闭环控制）均不提供额外增益——简单性是诊断的成果，不是方法的局限。
 
-**核心发现**：诊断揭示架构瓶颈（ResNet 漂移 >> Attention），校正利用瓶颈特征做鲁棒注入（1 层 ≈ 5 层效果）。简单性是诊断的成果，不是方法的局限。
+> 核心贡献是**发现规律**（Architecture Fingerprint），方法是**利用规律**的自然推论。线性插值公式不是我们的发明（RLI 已独立发现类似形式），我们的贡献是**诊断→定位→极简干预**的范式以及"为什么线性插值有效"的理论解释。
 
-## CVPR 目标创新点
+## CVPR 投稿定位
 
-投稿级创新点：
+**核心发现：Architecture Fingerprint of Feature Drift**
 
-1. **跨架构 / 跨范式的扩散反演特征漂移指纹**  
-   证明特征漂移是**架构签名（architecture signature）**，而非采样器 artifact。在 UNet (SD 1.5 / SDXL) / Transformer (HunyuanDiT) / MM-DiT (FLUX) 三种 backbone 以及 DDIM / Flow Matching 两种范式下统一量化。FLUX vs HunyuanDiT Pearson r=0.727（同 backbone）> FLUX vs SD 1.5 r=0.486（不同 backbone）——**backbone attention 结构决定漂移模式，范式影响次要**。
+特征漂移不是随机噪声——它是**架构签名**。漂移模式由 backbone 的 attention 拓扑（single-stream vs dual-stream, CNN skip vs residual stream）决定，不由采样范式（DDIM vs Flow Matching）决定。四架构两范式统一量化支持这一结论。
 
-2. **诊断驱动的零训练残差校正——简单性即优势**  
-   诊断揭示注入位置不重要（random5≈top5）且 λ 不敏感（0.3-0.7 差 <0.08 dB）——**最简单的全局 latent 注入就是最优解**。四架构校正均显著有效（SD 1.5 +2.50 dB, SDXL +5.37 dB, HunyuanDiT +5.65 dB, FLUX +3.94 dB）。在编辑 benchmark 上将内容保持提升 40%（LPIPS 0.86→0.51），远超简化版 P2P。与 P2P 统计等价（Cohen's d=0.033），内存低数百倍。Feature-level 校正反而无效（Δ=−0.27 dB），文本 token 残差零增益——刻意复杂化会降低性能。
+**理论：信息论解释漂移为何有结构**
 
-> 这两个创新点构成”先发现规律，再利用规律设计方法”的完整主线。线性插值不是我们的发明（RLI 已独立发现），但**诊断→定位→极简干预**的范式以及”为什么线性插值有效”的理论解释是我们的核心贡献。
+因果消融 + 互信息估计表明 ResNet 残差的可恢复信息远多于 Attention（ΔPSNR 2.1×）——这解释了漂移为何集中在特定层类型，以及为何简单校正有效。
+
+**工程验证：最简校正是诊断的自然推论**
+
+校正对注入位置鲁棒（random5≈top5）、对 λ 不敏感、跨架构有效。这不是”我们发明了好方法”——这是”诊断充分后，最简单的方法就足够”。Feature-level 校正无效（Δ=−0.27 dB）和闭环控制无增益进一步支持：刻意复杂化不带来收益。
+
+> 论文回答的核心问题是 **”Why does inversion fail?”** 而非 **”How to improve inversion?”**。答案：反演失败具有清晰的架构级结构。利用这一结构，最简干预即可。发现规律是贡献，利用规律是验证。
 
 ## 项目阶段
 
@@ -99,7 +103,9 @@ CLIP 空间正交投影 + 闭环钉扎反馈。风格注入时保护内容结构
 
 ---
 
-## Phase 4：理论深化 + 跨架构验证 ✅
+## Phase 4：理论分析 + 跨架构验证 ✅
+
+理论目标：解释漂移为何具有架构级结构，以及为何最简校正有效。信息论（因果消融 + 互信息估计）作为主要框架，流形分析与收敛性推导作为补充视角。
 
 ### 信息论（因果消融 + 互信息估计）
 
@@ -365,22 +371,20 @@ DiT 最优 λ=**0.9**，与 SD 1.5 的 λ=0.7 不同——DiT 反演质量更差
 
 ## 设计原则
 
-1. **Diagnosis precedes intervention**（诊断先于干预）：Phase 1 的逐层漂移诊断先于 Phase 2 的校正
-2. **Correction is geometry-aware**（校正利用几何结构）：因果消融 + 互信息 + 流形分析互补证明残差是有意义的信号
-3. **Simplicity over complexity**（简单优于复杂）：1 层校正 ≈ 5 层效果。诊断告诉我们不需要复杂控制——skip connections 本身就是天然的鲁棒性保证
-4. **Honesty over hype**（诚实优于包装）：DCSC 闭环控制的失败被诚实记录，收敛性推导明确标注假设条件和实证差距
+1. **Discovery precedes method**（发现先于方法）：Architecture Fingerprint 是核心贡献，校正是验证这一发现的自然推论。论文回答 "Why does inversion fail?" 而非 "How to improve inversion?"
+2. **Simplicity is a consequence of diagnosis**（简单是诊断的成果）：1 层 ≈ 5 层效果。诊断告诉我们不需要复杂控制——架构的内在冗余本身就是鲁棒性保证。简单不是妥协，是理解到位后的必然
+3. **Theory explains experiment**（理论解释实验）：信息论框架解释漂移为何有结构、为何 λ 不敏感、为何 random5≈top5。不宣称"理论预测"，只宣称"理论解释"
+4. **Honesty over hype**（诚实优于包装）：DCSC 闭环控制的失败被诚实记录，收敛性推导明确标注假设条件和实证差距。负结果不是失败——它们支撑了"简单性即优势"的叙事
 
 ---
 
 ## 论文叙事
 
-What → Why → How 三章递进：
+**Discovery → Understanding → Exploitation** 三章递进：
 
-- **What（第 3 章 诊断）**：漂移不是噪声，有清晰的架构级结构
-- **Why（第 4 章 理论）**：三视角互补解释漂移成因
-- **How（第 5 章 校正）**：诊断驱动的最简校正 + SOTA 对比
-
-叙事文件：`THESIS_NARRATIVE.md`
+- **Chapter 3 — Discovery（诊断）**：漂移不是噪声，有清晰的架构级结构（Architecture Fingerprint）
+- **Chapter 4 — Understanding（理论）**：信息论（因果消融 + MI）作为主要理论框架解释漂移为何有结构；流形分析和收敛性推导作为补充视角
+- **Chapter 5 — Exploitation（校正）**：诊断驱动的最简校正——方法简单是因为诊断充分，不是方法简陋
 
 ---
 
@@ -440,10 +444,10 @@ What → Why → How 三章递进：
 | 维度 | RLI | Ours |
 |------|-----|------|
 | **瓶颈识别策略** | 基于启发式经验，在 UNet 的 attention 层实施残差插值以平滑突变 | 通过层间诊断量化定位架构瓶颈（196/40/57 层），实现**精准干预**而非全局均匀插值 |
-| **理论解释深度** | 从注意力平滑角度提供直观动机：减少 attention 突变可缓解编辑伪影 | 从**表示坍塌、流形对齐、信息瓶颈**三维度建立形式化理论框架，阐明线性插值的有效性边界与适用条件 |
+| **理论解释深度** | 从注意力平滑角度提供直观动机：减少 attention 突变可缓解编辑伪影 | 从信息论角度（因果消融 + 互信息估计）解释线性插值为何有效、何时有效，流形与收敛性分析作为补充 |
 | **架构兼容性** | 在 SD 1.5 / SDXL 的 UNet-based 扩散模型上验证 | 覆盖 **UNet、HunyuanDiT、MM-DiT 及 Flow Matching** 等主流生成架构，验证跨范式泛化性 |
 | **问题聚焦** | 针对编辑过程中出现的局部 artifact 与 attention 突变进行后验平滑 | 针对 **inversion-reconstruction 不一致性的根源**进行先验修正，从源头提升编辑保真度 |
 
 - **LAMS-Edit**（最接近，开环混合）→ **Prompt-to-Prompt**（交叉注意力）→ **DiffStateGrad**（SVD 低秩）
 
-**差异化定位**：诊断驱动 + 理论闭环 + 跨架构验证 + 内存优势 + 统计等价于 P2P。线性插值不是我们的发明——RLI 已独立发现类似形式——我们的贡献是**诊断→定位→极简干预**这个范式：一旦通过逐层诊断定位了架构瓶颈，最简线性校正即可达到复杂方法的同等效果。简单性是诊断的必然结果，而非调参的偶然发现。
+**差异化定位**：诊断驱动 + 理论解释 + 跨架构验证 + 内存优势 + 统计等价于 P2P。线性插值不是我们的发明——RLI 已独立发现类似形式——我们的贡献是**发现 Architecture Fingerprint** 这一规律，以及**诊断→定位→极简干预**的范式：一旦通过逐层诊断定位了架构瓶颈，最简线性校正即可达到复杂方法的同等效果。简单性是诊断的必然结果，而非调参的偶然发现。

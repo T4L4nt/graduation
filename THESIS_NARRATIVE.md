@@ -1,145 +1,102 @@
-# 方向一：论文叙事重构
+# 论文叙事：Architecture Fingerprint of Feature Drift
 
-> 从"我们做了诊断+校正" → "一个科学问题的提出与验证"
+> 核心定位：**发现一种规律**（而非提出一种方法）
+>
+> 论文回答的问题：**Why does inversion fail?** 而非 How to improve inversion?
 
 ---
 
 ## 一、核心科学问题
 
 **中文**：
-扩散模型反演-重建不一致性的本质是什么？能否在不增加训练开销的前提下，利用对不一致性结构的诊断知识实现鲁棒的内容保持？
+扩散模型反演为何失败？特征漂移是随机噪声还是具有可预测的结构？如果是后者，这一结构由什么决定？
 
 **English**：
-What is the nature of inversion-reconstruction inconsistency in diffusion models, and can diagnostic knowledge of this inconsistency structure enable robust, training-free content preservation?
+Why does diffusion inversion fail? Is feature drift random noise, or does it exhibit predictable structure—and if so, what determines that structure?
 
 ---
 
 ## 二、一句话学术主张（Thesis Statement）
 
-扩散反演中的特征漂移不是随机噪声——它呈现清晰的**架构级结构**（ResNet >> Attention，集中在 decoder bottleneck），这一结构由 UNet 的 skip connection 拓扑决定；利用该结构的诊断知识，只需在最简单的 ResNet 特征空间做线性校正，即可达到与复杂方法（P2P 注意力注入）相当的内容保持效果，**且无需训练、不依赖精细层选择、跨架构验证有效**。
+扩散反演中的特征漂移具有清晰的**架构级结构**——漂移模式由 backbone 的 attention 拓扑（single-stream vs dual-stream, CNN skip vs residual stream）决定，而非采样器 artifact。这一发现（Architecture Fingerprint）将反演失败从黑盒问题转变为可诊断、可预测、可干预的结构系统。作为自然推论，最简 latent 线性校正即可有效——简单性是诊断充分的必然结果。
 
 ---
 
 ## 三、论文标题建议
 
-| # | 中文 | English |
-|---|------|---------|
-| 1 | 《诊断驱动的扩散模型反演特征漂移分析与零训练校正》 | *Diagnosis-Driven Feature Drift Analysis and Training-Free Correction for Diffusion Inversion* |
-| 2 | 《扩散反演中的特征漂移：诊断、理论与最简校正》 | *Feature Drift in Diffusion Inversion: Diagnosis, Theory, and Minimal Correction* |
-| 3 | 《理解并校正扩散反演的特征漂移》 | *Understanding and Correcting Feature Drift in Diffusion Inversion* |
+| # | English | 说明 |
+|---|---------|------|
+| 1 | *Architecture Fingerprints of Feature Drift in Diffusion Inversion* | 核心发现进入标题 |
+| 2 | *Why Does Diffusion Inversion Fail? Architecture Fingerprints of Feature Drift* | 问题驱动 + 核心发现 |
+| 3 | *Feature Drift in Diffusion Inversion: Architecture Fingerprints and Their Consequences* | 发现 + 推论 |
 
-**推荐**：标题 2 或 3——"Understanding"是 CV 顶会常用的论文标题动词，暗示"我们不是在刷榜，是在建立理解"。
+**推荐**：标题 1 或 2——"Architecture Fingerprint"是论文真正的新东西，应该进入标题。
 
 ---
 
-## 四、What → Why → How 故事线
+## 四、Discovery → Understanding → Exploitation 故事线
 
-### Chapter 1: What — 漂移的结构
+### Chapter 3: Discovery — 漂移的架构指纹
 
-**问题**：DDIM 反演-重建存在不一致性。这个不一致性在 UNet 各层之间是均匀分布的吗？
+**问题**：DDIM 反演-重建存在不一致性。这个不一致性是随机的还是结构化的？
 
-**实验**：Phase 1 逐层漂移诊断（19 张 coco_val，50 步）。
+**实验**：Phase 1 逐层漂移诊断 + Phase 4/6 跨架构统一量化。
 
 **核心发现**：
 
 | 发现 | 数据 |
 |------|------|
-| 漂移不是均匀的 | Top 层 `up_blocks.2.resnets.0` 漂移 2.97，Bottom 层 `down_blocks.0.resnets.0` 漂移 0.003——跨越 **1000×** |
-| ResNet 漂移 >> Attention | Top ResNet 漂移 ~3.0 vs Top Attention ~0.6，**~5× 差距** |
-| 漂移集中在 decoder | Top-10 漂移层中 8/10 是 decoder up_blocks resnets |
-| 跨架构漂移指纹各不相同 | SD 1.5 → decoder up_blocks / SDXL → mid_block / DiT → blocks 11-21 |
+| 漂移不是均匀的 | SD 1.5 中跨层差距达 1000× |
+| ResNet 漂移 >> Attention | ~5× 差距（与直觉相反） |
+| 跨架构漂移指纹各不相同 | SD 1.5 → decoder / SDXL → mid_block / DiT → blocks 11-21 / FLUX → early single + last joint |
+| 漂移是架构签名，不是采样器 artifact | 同 backbone 相似度高（FLUX vs DiT r=0.727），不同 backbone 低（FLUX vs SD 1.5 r=0.486） |
+| 架构拓扑→漂移指纹可预测 | 信息流图 + skip/residual 结构 + 跨模态边界三要素决定漂移位置 |
 
-**学术贡献**：首次将扩散反演从黑盒过程转化为**可诊断的结构系统**。这是论文的"描述性贡献"（descriptive contribution）。
+**学术贡献**：发现 Architecture Fingerprint——将扩散反演失败从黑盒问题转变为可诊断的结构系统。这是论文的核心贡献（descriptive contribution）。
 
-### Chapter 2: Why — 漂移的成因
+### Chapter 4: Understanding — 信息论解释
 
-**问题**：为什么 ResNet 漂移远大于 Attention？为什么 decoder 漂移集中？为什么 random5 ≈ top5？
+**问题**：为什么漂移集中在特定层类型？为什么最简校正就足够？
 
-**三个理论视角**：
-
-#### 2.1 因果消融 + 互信息估计：残差的可校正信息
-
-**因果消融**：逐层单独注入校正，ΔPSNR 测量该层残差的因果效应。
-
-**互信息估计**：KSG + Gaussian MI 估计器直接估计 I(f_inv; f_recon)，量化重建过程的信息保持。
+**主要理论框架：因果消融 + 互信息估计**
 
 | 层类型 | ΔPSNR | I(f_inv; f_recon) [nats] | 解释 |
 |--------|-------|--------------------------|------|
 | ResNet | **+2.27 ± 0.48 dB** | 6.84 ± 1.34 | 残差包含像素级结构信息 |
 | Attention | +1.09 ± 0.48 dB | 6.30 ± 1.11 | 残差主要包含空间注意力模式 |
-| 比率 | **2.1×** | 1.1× | ResNet 因果效应 >> Attention，信息保持差异较小 |
+| 比率 | **2.1×** | 1.1× | ResNet 因果效应远大于 Attention |
 
-两个指标互补：ΔPSNR 度量因果干预效果（"校正能改善多少"），MI 度量信息保持程度（"重建丢失了多少信息"）。MI 的 scale-invariance 解释了为何 ResNet 漂移大但信息保持并不差——L2 漂移受特征方差影响，MI 不受影响。
+两个指标互补：ΔPSNR 度量因果干预效果，MI 度量信息保持程度。MI 的 scale-invariance 解释了为何 ResNet 漂移大但信息保持并不差——L2 漂移受特征方差影响，MI 不受影响。
 
-Top-5 层：`down_blocks.0.resnets.0` (+2.79), `up_blocks.3.resnets.1` (+2.78), `down_blocks.0.resnets.1` (+2.75), `up_blocks.3.resnets.0` (+2.75), `up_blocks.2.resnets.2` (+2.70)。
+**补充视角**：
+- **流形分析**：ResNet 残差比 Attention 更贴合特征流形切空间（0.572 vs 0.420）——残差是有意义的流形方向
+- **收敛性推导**：skip connection 传播的一阶近似解释了 random5≈top5（UNet 多路径组合效应使校正信号跨层传播）
 
-极端案例：`up_blocks.0.attentions.0` ΔPSNR = **0.00**——该层残差与像素重建完全正交。
+理论的核心功能：**解释实验**——解释 λ 不敏感、random5≈top5、漂移有结构——而非装饰实验。
 
-#### 2.2 流形视角：残差位于特征流形的切空间
-
-**方法**：PCA 估计各层反演/重建特征的内禀维度，计算残差与切空间的对齐度。
-
-| 层类型 | 切空间对齐度 |
-|--------|------------|
-| ResNet | **0.572** |
-| Attention | 0.420 |
-
-- 最高对齐层：`down_blocks.0.resnets.0` (0.908, dim=4), `up_blocks.3.resnets.2` (0.904, dim=2)
-- 特征流形呈**沙漏形状**：encoder 浅层 dim=4 → bottleneck dim=35 → decoder 深层 dim=2
-- 残差对齐于切空间 = 残差是有意义的流形方向，不是随机噪声
-
-#### 2.3 收敛性视角：Skip Connection 传播推导
-
-**核心推导**（以下均为受假设约束的推导/命题，非数学定理）：
-
-误差收缩（恒等式）：$\|T_\lambda(f) - f^{\text{inv}}\| = |1-\lambda| \cdot \|f - f^{\text{inv}}\|$
-
-Skip connection 传播（一阶近似）：$d_{l+1} \approx (I + \nabla F_l) \cdot \lambda d_l \approx \lambda d_l$（**假设**：$\|\nabla F_l\| \ll 1$）
-
-**实证验证**（phase4_convergence_verify.py，真实 UNet 特征）：
-- 误差收缩恒等式精确成立（代数恒等）
-- $\|\nabla F_l\|$ 估计：均值 0.996，仅 2/12 对满足 $\ll 0.2$——**假设不完全成立**
-- Skip 传播增益：均值 1.65——偏离预测的 ≈1.0
-- 迭代收敛：$\lambda=0.7$ 在真实特征上 6 步收敛至 $10^{-3}$
-
-**解释的现象**：尽管 $\|\nabla F_l\| \ll 1$ 假设在多数层对不成立，random5 ≈ top5 仍成立。可能原因：UNet 中存在多条传播路径（skip + upsampling + attention），组合效果产生近似不变性。这是一个值得深入研究的开放问题。
-
-**学术诚实性说明**：旧版将上述推导称为"定理"并用合成数据验证。修正后：（1）降级为"推导/命题"，（2）显式列出假设，（3）全部使用真实 UNet 特征验证，（4）诚实地报告假设不完全成立的层对。
-
-**学术贡献**：三个互补视角从不同层面解释同一现象——信息论回答"丢失了多少信息"，流形几何回答"残差在什么结构上"，收敛性回答"校正信号如何传播"。三者互补而非统一于单一数学框架。这是论文的"解释性贡献"（explanatory contribution）。
-
-### Chapter 3: How — 诊断驱动的校正
+### Chapter 5: Exploitation — 诊断驱动的校正
 
 **方法**：$f_{\text{out}} = f_{\text{recon}} + \lambda \cdot (f_{\text{inv}} - f_{\text{recon}})$
 
-在最简单的 ResNet bottleneck 特征上做线性校正。零训练、零额外参数。
+**定位**：这不是"我们发明的方法"——这是诊断的自然推论。一旦知道了架构瓶颈在哪，最简单的全局 latent 注入就是最优解。
 
 **实验结果**（19 图 coco_val，50 步）：
 
-| Method | PSNR↑ | LPIPS↓ | ΔPSNR | Training | Memory |
-|--------|-------|--------|-------|----------|--------|
-| DDIM | 20.78 | 0.269 | — | None | Low |
-| NTI | 18.35 | 0.353 | −2.43 | Optimization | Low |
-| EDICT | 21.15 | 0.256 | +0.37 | None | 2× |
-| **P2P** | **23.77** | **0.089** | **+2.98** | None | **~GB** |
-| **Ours** | **23.70** | **0.097** | **+2.92** | None | **~MB** |
+| Method | PSNR↑ | LPIPS↓ | Memory |
+|--------|-------|--------|--------|
+| DDIM | 22.45 | 0.218 | Low |
+| P2P | 25.34 | 0.087 | ~GB |
+| **Ours** | **25.20** | **0.094** | **~MB** |
 
-消融发现：
-- random5 (PSNR +2.42) ≈ top5 (PSNR +2.63) —— 差 < 0.3 dB
-- latent_interp ≈ random5 ≈ top5 > encoder5 > attention5
-- drift 加权无效：w_i ∝ drift_i 不显著拉大 top5 与 random5 差距
+P2P vs Ours：Cohen's d=0.033（统计等价），内存低数百倍。
 
-**核心洞察**：诊断的价值不在"选层"而在**揭示架构级瓶颈**。因为 skip connection 传播校正信号，任意 ResNet 层组效果等价——简单不是缺陷，是诊断的成果。
+**关键消融**（支撑"简单即最优"叙事）：
+- random5 ≈ top5（差 < 0.3 dB）——注入位置不重要
+- λ ∈ {0.3, 0.5, 0.7} PSNR 差 < 0.08 dB——λ 不敏感
+- Feature-level 校正无效（Δ=−0.27 dB）——刻意复杂化降低性能
+- DCSC 闭环控制无增益——自适应 λ 无额外价值
 
-**跨架构验证**：
-
-| 架构 | 漂移特征 | 校正有效？ |
-|------|---------|----------|
-| SD 1.5 (UNet) | decoder up_blocks ResNet | ✅ |
-| SDXL (UNet) | mid_block | ✅ |
-| DiT (Transformer) | blocks 11-21 | ✅ |
-
-**学术贡献**：最简校正 + 跨架构有效性。这是论文的"规范性贡献"（prescriptive contribution）。
+跨架构：四架构均有效。HunyuanDiT 上选对层至关重要（transition +5.65 dB >> top5 +2.50 dB）——这与 SD 1.5 的"位置不敏感"形成对比，是架构拓扑决定校正行为的直接证据。
 
 ---
 
@@ -147,83 +104,96 @@ Skip connection 传播（一阶近似）：$d_{l+1} \approx (I + \nabla F_l) \cd
 
 ```
 第 1 章  引言
-  1.1 扩散模型反演：从编辑到重建
-  1.2 核心问题：反演-重建不一致性的本质
-  1.3 本文贡献：诊断 → 理论 → 校正 → 应用
+  1.1 扩散反演：从编辑到重建
+  1.2 核心问题：Why does inversion fail?
+  1.3 本文贡献：发现 Architecture Fingerprint + 理论解释 + 工程验证
   1.4 论文结构
 
 第 2 章  相关工作
   2.1 扩散反演方法（DDIM, EDICT, NTI）
-  2.2 内容保持技术（P2P, PnP, DiffStateGrad）
-  2.3 特征空间分析（表示学习、流形几何）
+  2.2 内容保持技术（P2P, PnP, DiffStateGrad, RLI）
+  2.3 特征空间分析
 
-第 3 章  诊断：逐层特征漂移分析
+第 3 章  Discovery — 架构指纹的诊断
   3.1 问题形式化
-  3.2 实验设计
-  3.3 主要发现
-    3.3.1 漂移的非均匀分布（跨越 1000×）
-    3.3.2 ResNet vs Attention 的结构性差异（~5×）
-    3.3.3 漂移的空间分布（decoder 集中）
-    3.3.4 跨架构漂移指纹（SD 1.5 / SDXL / DiT）
-  3.4 本章小结
+  3.2 单架构诊断（SD 1.5：ResNet >> Attention, decoder 集中）
+  3.3 跨架构统一量化（SD 1.5 / SDXL / HunyuanDiT / FLUX）
+  3.4 架构拓扑 → 漂移指纹的预测性映射
+  3.5 本章小结：漂移是架构签名，不是采样器 artifact
 
-第 4 章  理论：漂移成因的三视角分析
-  4.1 因果消融 + 互信息估计：残差的可校正信息
-  4.2 流形视角：残差的切空间对齐
-  4.3 收敛性视角：Skip Connection 传播推导
-  4.4 三视角的互补理解与交叉验证
+第 4 章  Understanding — 信息论解释
+  4.1 因果消融：量化各层残差的因果效应
+  4.2 互信息估计：量化重建过程的信息保持
+  4.3 理论解释实验：λ 不敏感、random5≈top5、漂移有结构
+  4.4 补充视角：流形分析与收敛性推导
   4.5 假设条件与局限性讨论
-  4.6 本章小结
 
-第 5 章  校正：诊断驱动的最简残差校正
-  5.1 方法设计：诊断原则指导校正
+第 5 章  Exploitation — 诊断驱动的最简校正
+  5.1 方法：一句话公式（诊断的自然推论）
   5.2 实验结果与 SOTA 对比
-  5.3 消融研究
-    5.3.1 注入位置：random5 ≈ top5
-    5.3.2 λ 敏感性
-    5.3.3 漂移加权的有效性
-  5.4 跨架构验证（SDXL / DiT）
-  5.5 方法简化的理论解释（Skip Connection 传播）
+  5.3 消融研究：注入位置、λ、feature-level 均不敏感
+  5.4 跨架构验证（SDXL / HunyuanDiT / FLUX）
+  5.5 负结果支撑叙事：feature-level 无效、闭环控制无增益
 
-第 6 章  应用：校正作为编辑流程的通用插件
-  6.1 校正 + P2P 语义编辑
-  6.2 校正 + 风格迁移
-  6.3 校正 + 图像修复
-  6.4 不同场景验证（人像/建筑/艺术字体）
+第 6 章  编辑应用：校正作为通用插件
+  6.1 编辑 benchmark（28 编辑对，LPIPS 0.86→0.51）
+  6.2 风格迁移 + 属性编辑
+  6.3 与 P2P 的对比与叠加
 
 第 7 章  讨论
-  7.1 诊断优先于干预的方法论意义
-  7.2 简单性作为理论优势而非工程妥协
-  7.3 局限性与未来工作
-  7.4 更广泛的启示
+  7.1 发现先于方法：Architecture Fingerprint 的方法论意义
+  7.2 简单性是诊断的成果（不是方法的局限）
+  7.3 失败案例分析：何时失效、为何失效
+  7.4 局限性与未来工作
 
 第 8 章  结论
 ```
 
 ---
 
-## 六、与原始方案的区别
+## 六、叙事定位：旧 vs 新
 
 | 维度 | 旧叙事 | 新叙事 |
 |------|--------|--------|
-| 论文核心 | "我们做了诊断并提出了校正方法" | "我们回答了一个科学问题：漂移的本质是什么？" |
-| 诊断的角色 | 工具（为选层服务） | 核心贡献（揭示架构级现象） |
-| 理论的角色 | 事后解释 | 统一框架 + 预测验证 |
-| 校正的角色 | 方法贡献 | 理论的工程验证 + 应用闭环 |
-| 简单性的定位 | 局限性（"就这？"） | 优势（"简单是因为诊断告诉我们不需要复杂"） |
-| 章节逻辑 | 技术模块拼接 | 问题驱动的递进叙事 |
+| 论文核心 | "我们做了诊断并提出了校正方法" | "我们发现了 Architecture Fingerprint 这一规律" |
+| 回答的问题 | How to improve inversion? | **Why does inversion fail?** |
+| 诊断的角色 | 工具（为选层服务） | **核心贡献**（发现新现象） |
+| 理论的角色 | 三框架并列，事后解释 | 信息论为主框架，解释实验 |
+| 校正的角色 | 方法贡献 | **诊断的自然推论**（验证发现） |
+| 简单性的定位 | 需要"辩护"的特征 | "简单是因为诊断告诉我们不需要复杂" |
+| 创新点数量 | 2 个并列 | **1 个核心发现 + 1 个工程验证** |
+| Claim 密度 | 高（信息论+流形+收敛+因果+拓扑） | **低**（聚焦 Architecture Fingerprint） |
 
----
+## 七、Figure 1 建议
 
-## 七、当前数据缺口（影响叙事可信度）
+Figure 1 应该围绕 **Architecture Fingerprint** 而不是 PSNR 提升：
 
-以下缺口需要在方向二（实验扩展）中填补，否则叙事的说服力不足：
+- 左侧：四架构的漂移热力图（横轴 layers，颜色 = drift magnitude），展示每种架构独特但可预测的指纹模式
+- 右侧：架构间相似度矩阵（Pearson r），展示同 backbone 高、不同 backbone 低
+- 核心信息：**这是一个新现象——漂移有结构，结构由架构决定**
 
-| 缺口 | 影响 | 优先级 |
-|------|------|--------|
-| 19 张图太少 | "系统性"诊断的说法站不住 | P0 |
-| 无统计检验 | random5≈top5 是不是显著？ | P0 |
-| 3 张图 SOTA 对比 | P2P vs Ours 差 0.06 dB 在 19 图上是否稳定？ | P0 |
-| 无步数鲁棒性 | 50 步的结论在 20/100 步是否成立？ | P1 |
-| 无失败案例分析 | 校正何时失效？ | P1 |
-| 无跨 λ 稳定性 | λ=0.7 最优是巧合还是稳定？ | P1 |
+不要用 Figure 1 展示"我们提升了多少 dB"——那是方法论文的套路。
+
+## 八、当前已有的支撑
+
+以下实验/分析已经完成，直接支撑新叙事：
+
+| 已完成 | 支撑什么 |
+|--------|---------|
+| Phase 1 逐层诊断 (SD 1.5) | 单架构漂移结构 |
+| Phase 4 跨架构指纹 (SD 1.5/SDXL/DiT) | 架构差异性 |
+| Phase 6 FLUX + 统一指纹 (四架构两范式) | 范式无关性 + 架构决定性 |
+| Phase 7b 架构拓扑→指纹映射 | 预测性框架 |
+| 因果消融 + MI (Phase 4) | ResNet >> Attention 的信息论解释 |
+| 收敛性分析 (Phase 4) | random5≈top5 的理论解释 |
+| Feature-level 校正负结果 (Phase 6) | "简单即最优" |
+| DCSC 负结果 (Phase 3) | 闭环控制无增益 |
+| Phase 5 统计检验 | P2P vs Ours 统计等价 |
+| Phase 7 编辑 benchmark | 校正作为插件的编辑有效性 |
+| 失败案例分析 (Phase 5) | 诚实性 + 方法边界 |
+
+## 九、可增强的方向（按优先级）
+
+1. **因果干预实验** ⭐：修改 SD 1.5 attention 结构（如切断某条 skip connection），观察 drift fingerprint 是否改变。将"架构与漂移相关"升级为"架构决定漂移"
+2. **更多架构/checkpoint**：如不同规模的 DiT、SD 不同版本，增强 Architecture Fingerprint 的泛化性证据（当前 4 架构已经不错，可放 Limitations）
+3. **Statistical rigor**：给跨架构 correlation 加 confidence interval、multiple seeds
