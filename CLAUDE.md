@@ -23,8 +23,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 1. **跨架构 / 跨范式的扩散反演特征漂移指纹**  
    证明特征漂移是**架构签名（architecture signature）**，而非采样器 artifact。在 UNet (SD 1.5 / SDXL) / Transformer (DiT) / MM-DiT (FLUX) 三种 backbone 以及 DDIM / Flow Matching 两种范式下统一量化。FLUX vs DiT Pearson r=0.727（同 backbone）> FLUX vs SD 1.5 r=0.486（不同 backbone）——**backbone attention 结构决定漂移模式，范式影响次要**。
 
-2. **架构感知的零训练自适应校正**  
-   基于漂移指纹自动决定注入位置与强度，跨架构跨范式通用。四架构校正均显著有效（SD 1.5 +2.50 dB, SDXL +5.23 dB, DiT +4.67 dB, FLUX +3.94 dB）。与 P2P 统计等价（Cohen's d=0.033），内存低数百倍。**Feature-level 校正反而无效**（Δ=−0.27 dB），text token 残差零增益——最简单方法（latent correction）跨范式最优。
+2. **诊断驱动的零训练残差校正——简单性即优势**  
+   诊断揭示注入位置不重要（random5≈top5）且 λ 不敏感（0.3-0.7 差 <0.08 dB）——**最简单的全局 latent 注入就是最优解**。四架构校正均显著有效（SD 1.5 +2.50 dB, SDXL +5.23 dB, DiT +4.67 dB, FLUX +3.94 dB）。与 P2P 统计等价（Cohen's d=0.033），内存低数百倍。Feature-level 校正反而无效（Δ=−0.27 dB），文本 token 残差零增益——刻意复杂化会降低性能。
 
 > 这两个创新点构成”先发现规律，再利用规律设计方法”的完整主线。线性插值不是我们的发明（RLI 已独立发现），但**诊断→定位→极简干预**的范式以及”为什么线性插值有效”的理论解释是我们的核心贡献。
 
