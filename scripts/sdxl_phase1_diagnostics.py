@@ -27,13 +27,8 @@ DTYPE = torch.float16 if DEVICE == "cuda" else torch.float32
 MODEL_ID = "stabilityai/stable-diffusion-xl-base-1.0"
 
 OUT_DIR = Path("outputs/sdxl_phase1")
-TEST_IMAGES = [
-    "data/basetest/face1.jpg",
-    "data/basetest/face2.jpg",
-    "data/basetest/nature.jpg",
-    "data/basetest/architecture.jpg",
-    "data/basetest/still_life.jpg",
-]
+TEST_IMAGES = sorted(Path("data/coco_val").glob("*.jpg"))
+TEST_IMAGES = [str(p) for p in TEST_IMAGES]  # 19 images
 STEP_LIST = [4, 10, 20, 50]
 
 

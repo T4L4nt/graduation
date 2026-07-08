@@ -27,13 +27,7 @@ DTYPE = torch.float16 if DEVICE == "cuda" else torch.float32
 MODEL_ID = "Tencent-Hunyuan/HunyuanDiT-v1.2-Diffusers"
 
 OUT_DIR = Path("outputs/dit_phase1")
-TEST_IMAGES = [
-    "data/basetest/face1.jpg",
-    "data/basetest/face2.jpg",
-    "data/basetest/nature.jpg",
-    "data/basetest/architecture.jpg",
-    "data/basetest/still_life.jpg",
-]
+TEST_IMAGES = sorted([str(p) for p in Path("data/coco_val").glob("*.jpg")])  # 19 images
 STEP_LIST = [10, 20, 50]
 IMAGE_SIZE = 1024
 

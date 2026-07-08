@@ -28,14 +28,8 @@ from dit_phase2_common import (
 
 OUT_DIR = Path("outputs/dit_phase2")
 
-# coco_val images for quantitative evaluation
-COCO_VAL = [
-    "data/coco_val/coco_000000000285.jpg",
-    "data/coco_val/coco_000000000724.jpg",
-    "data/coco_val/coco_000000000802.jpg",
-    "data/coco_val/coco_000000001584.jpg",
-    "data/coco_val/coco_000000002153.jpg",
-]
+# coco_val images for quantitative evaluation (19 images)
+COCO_VAL = sorted([str(p) for p in Path("data/coco_val").glob("*.jpg")])
 LAMBDA_VALUES = [0.1, 0.3, 0.5, 0.7, 0.9]
 NUM_STEPS = 50
 
