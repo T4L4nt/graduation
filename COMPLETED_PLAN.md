@@ -57,7 +57,7 @@
 | 4.2 | 互信息估计（KSG + Gaussian MI） | ✅ | `scripts/phase4_mi_estimation.py`, `outputs/phase4_mi/` |
 | 4.3 | 特征流形分析与切空间对齐 | ✅ | `scripts/phase4_manifold.py`, `outputs/phase4_manifold/` |
 | 4.4 | 收敛性验证（真实 UNet 特征） | ✅ | `scripts/phase4_convergence_verify.py`, `outputs/phase4_convergence/` |
-| 4.5 | 跨架构漂移指纹（SD 1.5 / SDXL / DiT） | ✅ | `scripts/phase4_fingerprint.py` |
+| 4.5 | 跨架构漂移指纹（SD 1.5 / SDXL / HunyuanDiT） | ✅ | `scripts/phase4_fingerprint.py` |
 | 4.6 | P2P 交叉注意力对比 | ✅ | `scripts/phase4_p2p.py` |
 | 4.7 | ControlNet Canny 对比 | ✅ | `scripts/phase4_controlnet.py` |
 | 4.8 | 三类场景汇总 | ✅ | `scripts/phase4_scenes.py` |
@@ -89,7 +89,7 @@
 |---|------|------|------|------|
 | 6.1 | SD 1.5 (UNet) | ✅ | ✅ | decoder up_blocks 集中, Δ=+2.50 dB |
 | 6.2 | SDXL (UNet) | ✅ `sdxl_phase1_diagnostics.py` | ✅ `sdxl_phase2_full.py` | mid_block 集中, Δ=+5.23 dB |
-| 6.3 | DiT (Transformer) | ✅ `dit_phase1_diagnostics.py` | ✅ `dit_phase2_full.py` | blocks 11-21 集中, Δ=+4.67 dB |
+| 6.3 | HunyuanDiT (Transformer) | ✅ `dit_phase1_diagnostics.py` | ✅ `dit_phase2_full.py` | blocks 11-21 集中, Δ=+4.67 dB |
 | 6.4 | FLUX (MM-DiT) | ✅ `flux_phase6_diagnosis.py` | ✅ `flux_phase6c_analysis.py` | dual-peak, Δ=+3.94 dB |
 
 ### Phase 6：FLUX Flow Matching ✅
@@ -139,7 +139,7 @@
 | # | 任务 | 优先级 | 说明 |
 |---|------|--------|------|
 | 9.1 | SDXL 漂移 + 校正扩展到 19 图 | **阻塞** | 当前仅 5 图，需统计检验 |
-| 9.2 | DiT 漂移 + 校正扩展到 19 图 | **阻塞** | 当前仅 3-5 图，需统计检验 |
+| 9.2 | HunyuanDiT 漂移 + 校正扩展到 19 图 | **阻塞** | 当前仅 3-5 图，需统计检验 |
 | 9.3 | 真实编辑 benchmark（P2P-style prompt-changed） | **阻塞** | 非重建，需 word swap / attribute change |
 | 9.4 | 指纹与架构拓扑对应关系表 | **阻塞** | formalize "why dual-peak for FLUX" |
 
