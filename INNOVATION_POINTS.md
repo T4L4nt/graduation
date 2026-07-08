@@ -35,7 +35,7 @@
 | DiT 漂移指纹 | ⚠️ 5 图，需扩展到 19 图 |
 | FLUX 漂移指纹 | ✅ 19 图，完整统计 |
 | 四架构指纹图 + 相似度矩阵 | ✅ `outputs/phase6_unified/` |
-| 指纹与架构拓扑的对应关系表 | ⚠️ 需 formalize |
+| 指纹与架构拓扑的对应关系表 | ✅ `outputs/phase7_editing/arch_topo_fingerprint_mapping.png` |
 
 ---
 
