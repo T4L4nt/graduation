@@ -468,6 +468,424 @@ def compute_metrics(original: Image.Image, reconstructed: Image.Image) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Per-token text encoder drift analysis
+# ---------------------------------------------------------------------------
+
+def compute_per_token_drift(features_inv: dict, features_recon: dict) -> dict:
+    """Per-token text encoder drift across joint blocks.
+
+    For each joint block, computes drift per token position in the
+    encoder_hidden_states sequence. Reveals which text positions
+    (BOS, semantic tokens, padding) are most unstable.
+
+    Args:
+        features_inv/features_recon: Feature dicts from FluxFeatureExtractor.
+            Each entry has "encoder": Tensor [1, N_tokens, D].
+
+    Returns:
+        Dict with:
+          per_block: {block_name: [drift_per_position]}
+          block_means: {block_name: mean_drift_across_positions}
+          position_means: {pos_idx: mean_drift_across_blocks}
+          overall_mean: float
+    """
+    per_block = {}
+    position_sums = {}
+    position_counts = {}
+
+    if "final" not in features_inv or "first" not in features_recon:
+        return {"per_block": {}, "block_means": {}, "position_means": {}, "overall_mean": 0.0}
+
+    finv = features_inv["final"]
+    frecon = features_recon["first"]
+
+    for block_name in sorted(finv.keys()):
+        if not block_name.startswith("joint"):
+            continue
+
+        e_inv = finv[block_name]["encoder"].float()    # [1, N_tokens, D]
+        e_recon = frecon[block_name]["encoder"].float()  # [1, N_tokens, D]
+
+        n_tokens = e_inv.shape[1]
+        per_pos = []
+        for t in range(n_tokens):
+            diff = e_inv[0, t] - e_recon[0, t]
+            drift_t = float(torch.norm(diff).item() / (torch.norm(e_inv[0, t]).item() + 1e-8))
+            per_pos.append(drift_t)
+
+            pos_idx = str(t)
+            position_sums[pos_idx] = position_sums.get(pos_idx, 0.0) + drift_t
+            position_counts[pos_idx] = position_counts.get(pos_idx, 0) + 1
+
+        per_block[block_name] = per_pos
+
+    block_means = {k: float(np.mean(v)) for k, v in per_block.items()}
+    position_means = {k: position_sums[k] / position_counts[k] for k in position_sums}
+    overall_mean = float(np.mean(list(block_means.values()))) if block_means else 0.0
+
+    return {
+        "per_block": per_block,
+        "block_means": block_means,
+        "position_means": position_means,
+        "overall_mean": overall_mean,
+    }
+
+
+def compute_text_image_drift_correlation(per_block_drift: dict) -> float:
+    """Pearson r between encoder_drift and hidden_drift across joint blocks.
+
+    Args:
+        per_block_drift: Output from compute_block_drift().
+
+    Returns:
+        Pearson correlation coefficient.
+    """
+    encoder_drifts = []
+    hidden_drifts = []
+    for name, d in per_block_drift.items():
+        if name.startswith("joint"):
+            encoder_drifts.append(d["encoder_drift"])
+            hidden_drifts.append(d["hidden_drift"])
+
+    if len(encoder_drifts) < 3:
+        return 0.0
+
+    encoder_drifts = np.array(encoder_drifts)
+    hidden_drifts = np.array(hidden_drifts)
+    return float(np.corrcoef(encoder_drifts, hidden_drifts)[0, 1])
+
+
+# ---------------------------------------------------------------------------
+# Feature-level residual correction via hooks
+# ---------------------------------------------------------------------------
+
+class FluxFeatureCorrector:
+    """Hook-based feature-level residual correction for FLUX transformer blocks.
+
+    Injects residuals f_out = f_recon + lambda * (f_inv - f_recon) during
+    reconstruction, at the block level. Supports both image token (hidden)
+    and text token (encoder) correction independently.
+
+    Usage:
+        # 1. Run inversion to capture reference features
+        out_inv = flux_invert(pipe, img, extract_features=True)
+
+        # 2. Set up corrector with captured features
+        corrector = FluxFeatureCorrector(pipe.transformer, lam_hidden=0.7)
+        corrector.set_reference(out_inv["features_inv"])
+
+        # 3. Run reconstruction with correction active
+        #    (reconstruction loop uses flux_invert with corrector arg)
+    """
+
+    def __init__(
+        self,
+        transformer: nn.Module,
+        lam_hidden: float = 0.7,
+        lam_encoder: float = 0.0,
+        joint_indices: list = None,
+        single_indices: list = None,
+    ):
+        """
+        Args:
+            transformer: FluxTransformer2DModel instance.
+            lam_hidden: Correction strength for image tokens.
+            lam_encoder: Correction strength for text tokens (joint blocks only).
+            joint_indices: Which joint blocks to correct (default: all 19).
+            single_indices: Which single blocks to correct (default: all 38).
+        """
+        self.transformer = transformer
+        self.lam_hidden = lam_hidden
+        self.lam_encoder = lam_encoder
+        self.joint_indices = joint_indices or list(range(N_JOINT_BLOCKS))
+        self.single_indices = single_indices or list(range(N_SINGLE_BLOCKS))
+        self.reference: dict[str, dict[str, torch.Tensor]] = {}
+        self._handles = []
+
+    def set_reference(self, inv_features: dict):
+        """Set inversion features as correction targets.
+
+        Args:
+            inv_features: Features from inversion pass, in FluxFeatureExtractor
+                          format. Expected: {"final": {"joint_0": {...}, ...}}
+                          or flat format: {"joint_0": {...}, ...}.
+        """
+        # Handle nested (FluxFeatureExtractor) format: {"final": {...}}
+        if "final" in inv_features:
+            inv_features = inv_features["final"]
+
+        self.reference = {}
+        for name, feats in inv_features.items():
+            self.reference[name] = {
+                "encoder": feats["encoder"].clone(),
+                "hidden": feats["hidden"].clone(),
+            }
+
+    def register_hooks(self):
+        """Register forward hooks on all specified blocks."""
+        self.remove_hooks()
+
+        for i in self.joint_indices:
+            block = self.transformer.transformer_blocks[i]
+            handle = block.register_forward_hook(
+                self._make_joint_hook(i), with_kwargs=True
+            )
+            self._handles.append(handle)
+
+        for i in self.single_indices:
+            block = self.transformer.single_transformer_blocks[i]
+            handle = block.register_forward_hook(
+                self._make_single_hook(i), with_kwargs=True
+            )
+            self._handles.append(handle)
+
+    def _make_joint_hook(self, idx: int):
+        name = f"joint_{idx}"
+
+        def hook(module, args, kwargs, output):
+            enc, hid = output
+            if name not in self.reference:
+                return output
+            ref = self.reference[name]
+
+            if self.lam_hidden > 0:
+                ref_hid = ref["hidden"].to(hid.device, dtype=hid.dtype)
+                hid = hid + self.lam_hidden * (ref_hid - hid)
+
+            if self.lam_encoder > 0:
+                ref_enc = ref["encoder"].to(enc.device, dtype=enc.dtype)
+                enc = enc + self.lam_encoder * (ref_enc - enc)
+
+            return (enc, hid)
+
+        return hook
+
+    def _make_single_hook(self, idx: int):
+        name = f"single_{idx}"
+
+        def hook(module, args, kwargs, output):
+            enc, hid = output
+            if name not in self.reference or self.lam_hidden <= 0:
+                return output
+            ref_hid = self.reference[name]["hidden"].to(hid.device, dtype=hid.dtype)
+            hid = hid + self.lam_hidden * (ref_hid - hid)
+            return (enc, hid)
+
+        return hook
+
+    def remove_hooks(self):
+        for h in self._handles:
+            h.remove()
+        self._handles.clear()
+
+    def __enter__(self):
+        self.register_hooks()
+        return self
+
+    def __exit__(self, *args):
+        self.remove_hooks()
+
+
+# ---------------------------------------------------------------------------
+# Reconstruction with feature-level correction
+# ---------------------------------------------------------------------------
+
+def run_correction_feature(
+    pipe,
+    image: Image.Image,
+    num_steps: int = 50,
+    prompt: str = "",
+    guidance_scale: float = 3.5,
+    seed: int = 42,
+    lam_hidden: float = 0.7,
+    lam_encoder: float = 0.0,
+    joint_indices: list = None,
+    single_indices: list = None,
+) -> dict:
+    """Run inversion + feature-level corrected reconstruction.
+
+    1. Inversion captures per-block features at turnaround (t=1).
+    2. FluxFeatureCorrector registers hooks on specified blocks.
+    3. Reconstruction applies correction at each block output.
+
+    Args:
+        pipe: FluxPipeline instance.
+        image: Input PIL image.
+        num_steps: Number of flow matching steps.
+        prompt: Text prompt (empty string = unconditional-like).
+        guidance_scale: CFG scale.
+        seed: Random seed.
+        lam_hidden: Correction strength for image tokens.
+        lam_encoder: Correction strength for text tokens (joint only).
+        joint_indices: Which joint blocks to correct (None = all).
+        single_indices: Which single blocks to correct (None = all).
+
+    Returns:
+        dict with image_recon, image_corrected, metrics keys.
+    """
+    generator = torch.Generator(device=pipe.device).manual_seed(seed)
+
+    # Encode image
+    with torch.no_grad():
+        image_tensor = pipe.image_processor.preprocess(
+            image, height=image.height, width=image.width
+        )
+        image_tensor = image_tensor.to(pipe.device, dtype=pipe.vae.dtype)
+        z_0_raw = pipe.vae.encode(image_tensor).latent_dist.sample(generator)
+        z_0_raw = (
+            z_0_raw - pipe.vae.config.shift_factor
+        ) * pipe.vae.config.scaling_factor
+
+    batch_size, num_channels, latent_h, latent_w = z_0_raw.shape
+    packed_h = 2 * (latent_h // 2)
+    packed_w = 2 * (latent_w // 2)
+    img_h = latent_h * pipe.vae_scale_factor
+    img_w = latent_w * pipe.vae_scale_factor
+    z_0_raw = z_0_raw[:, :, :packed_h, :packed_w]
+    z_0 = pipe._pack_latents(z_0_raw, batch_size, num_channels, packed_h, packed_w)
+
+    latent_image_ids = pipe._prepare_latent_image_ids(
+        batch_size, packed_h // 2, packed_w // 2, pipe.device, pipe.transformer.dtype
+    )
+
+    # Text embeddings
+    if not prompt:
+        prompt = ""
+    with torch.no_grad():
+        prompt_embeds, pooled_prompt_embeds, text_ids = pipe.encode_prompt(
+            prompt=prompt, prompt_2=prompt, device=pipe.device,
+        )
+
+    if pipe.transformer.config.guidance_embeds:
+        guidance = torch.full([batch_size], guidance_scale, device=pipe.device, dtype=torch.float32)
+        guidance = guidance.expand(batch_size)
+    else:
+        guidance = None
+
+    dt = 1.0 / num_steps
+    timesteps_t = np.linspace(0.0, 1.0, num_steps + 1)
+
+    # --- Inversion pass (with feature extraction) ---
+    extractor = FluxFeatureExtractor(pipe.transformer)
+    extractor.register_hooks()
+    z_t = z_0.clone()
+
+    for i in tqdm(range(num_steps), desc="Invert"):
+        t_cur = timesteps_t[i]
+        t_tensor = torch.full(
+            (batch_size,), t_cur, device=pipe.device, dtype=pipe.transformer.dtype
+        )
+        with torch.no_grad():
+            noise_pred = pipe.transformer(
+                hidden_states=z_t,
+                encoder_hidden_states=prompt_embeds,
+                pooled_projections=pooled_prompt_embeds,
+                timestep=t_tensor,
+                img_ids=latent_image_ids,
+                txt_ids=text_ids,
+                guidance=guidance,
+                return_dict=True,
+            ).sample
+        z_t = z_t + noise_pred * dt
+
+        if i == num_steps - 1:
+            features_inv = extractor.get_features()
+
+    z_T = z_t.clone()
+    extractor.remove_hooks()
+
+    # --- Reconstruction pass (with feature correction) ---
+    corrector = FluxFeatureCorrector(
+        pipe.transformer,
+        lam_hidden=lam_hidden,
+        lam_encoder=lam_encoder,
+        joint_indices=joint_indices,
+        single_indices=single_indices,
+    )
+    corrector.set_reference(features_inv)
+    corrector.register_hooks()
+
+    z_t = z_T.clone()
+
+    for i in tqdm(range(num_steps), desc="Recon+Corr"):
+        t_cur = timesteps_t[num_steps - i]
+        t_tensor = torch.full(
+            (batch_size,), t_cur, device=pipe.device, dtype=pipe.transformer.dtype
+        )
+        with torch.no_grad():
+            noise_pred = pipe.transformer(
+                hidden_states=z_t,
+                encoder_hidden_states=prompt_embeds,
+                pooled_projections=pooled_prompt_embeds,
+                timestep=t_tensor,
+                img_ids=latent_image_ids,
+                txt_ids=text_ids,
+                guidance=guidance,
+                return_dict=True,
+            ).sample
+        z_t = z_t - noise_pred * dt
+
+    corrector.remove_hooks()
+
+    # Decode corrected reconstruction
+    z_0_recon = pipe._unpack_latents(z_t, img_h, img_w, pipe.vae_scale_factor)
+    z_0_recon = z_0_recon.to(pipe.device, dtype=pipe.vae.dtype)
+    z_0_recon = (
+        z_0_recon / pipe.vae.config.scaling_factor + pipe.vae.config.shift_factor
+    )
+
+    with torch.no_grad():
+        img_corr = pipe.vae.decode(z_0_recon, return_dict=False)[0]
+        img_corr = pipe.image_processor.postprocess(img_corr, output_type="pil")[0]
+
+    # Baseline reconstruction (no correction) for comparison
+    z_t = z_T.clone()
+    for i in tqdm(range(num_steps), desc="Recon (baseline)"):
+        t_cur = timesteps_t[num_steps - i]
+        t_tensor = torch.full(
+            (batch_size,), t_cur, device=pipe.device, dtype=pipe.transformer.dtype
+        )
+        with torch.no_grad():
+            noise_pred = pipe.transformer(
+                hidden_states=z_t,
+                encoder_hidden_states=prompt_embeds,
+                pooled_projections=pooled_prompt_embeds,
+                timestep=t_tensor,
+                img_ids=latent_image_ids,
+                txt_ids=text_ids,
+                guidance=guidance,
+                return_dict=True,
+            ).sample
+        z_t = z_t - noise_pred * dt
+
+    z_0_recon_bl = pipe._unpack_latents(z_t, img_h, img_w, pipe.vae_scale_factor)
+    z_0_recon_bl = z_0_recon_bl.to(pipe.device, dtype=pipe.vae.dtype)
+    z_0_recon_bl = (
+        z_0_recon_bl / pipe.vae.config.scaling_factor + pipe.vae.config.shift_factor
+    )
+
+    with torch.no_grad():
+        img_baseline = pipe.vae.decode(z_0_recon_bl, return_dict=False)[0]
+        img_baseline = pipe.image_processor.postprocess(img_baseline, output_type="pil")[0]
+
+    # Metrics
+    m_baseline = compute_metrics(image, img_baseline)
+    m_corr = compute_metrics(image, img_corr)
+
+    return {
+        "image_recon": img_baseline,
+        "image_corrected": img_corr,
+        "baseline_PSNR": m_baseline["PSNR"],
+        "baseline_LPIPS": m_baseline["LPIPS"],
+        "baseline_SSIM": m_baseline["SSIM"],
+        "corr_PSNR": m_corr["PSNR"],
+        "corr_LPIPS": m_corr["LPIPS"],
+        "corr_SSIM": m_corr["SSIM"],
+        "delta_PSNR": round(m_corr["PSNR"] - m_baseline["PSNR"], 3),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Batch diagnosis
 # ---------------------------------------------------------------------------
 
