@@ -88,8 +88,8 @@
 | # | 架构 | 诊断 | 校正 | 产出 |
 |---|------|------|------|------|
 | 6.1 | SD 1.5 (UNet) | ✅ | ✅ | decoder up_blocks 集中, Δ=+2.50 dB |
-| 6.2 | SDXL (UNet) | ✅ `sdxl_phase1_diagnostics.py` | ✅ `sdxl_phase2_full.py` | mid_block 集中, Δ=+5.23 dB |
-| 6.3 | HunyuanDiT (Transformer) | ✅ `dit_phase1_diagnostics.py` | ✅ `dit_phase2_full.py` | blocks 11-21 集中, Δ=+4.67 dB |
+| 6.2 | SDXL (UNet) | ✅ `sdxl_phase1_diagnostics.py` | ✅ `sdxl_phase2_full.py` | mid_block 集中, Δ=+5.37 dB |
+| 6.3 | HunyuanDiT (Transformer) | ✅ `dit_phase1_diagnostics.py` | ✅ `dit_phase2_full.py` | blocks 11-21 集中, Δ=+5.65 dB |
 | 6.4 | FLUX (MM-DiT) | ✅ `flux_phase6_diagnosis.py` | ✅ `flux_phase6c_analysis.py` | dual-peak, Δ=+3.94 dB |
 
 ### Phase 6：FLUX Flow Matching ✅
@@ -138,10 +138,10 @@
 
 | # | 任务 | 优先级 | 说明 |
 |---|------|--------|------|
-| 9.1 | SDXL 漂移 + 校正扩展到 19 图 | **阻塞** | 当前仅 5 图，需统计检验 |
-| 9.2 | HunyuanDiT 漂移 + 校正扩展到 19 图 | **阻塞** | 当前仅 3-5 图，需统计检验 |
-| 9.3 | 真实编辑 benchmark（P2P-style prompt-changed） | **阻塞** | 非重建，需 word swap / attribute change |
-| 9.4 | 指纹与架构拓扑对应关系表 | **阻塞** | formalize "why dual-peak for FLUX" |
+| 9.1 | SDXL 漂移 + 校正扩展到 19 图 | ✅ 已完成 | 22 图，Δ=+5.08 dB |
+| 9.2 | HunyuanDiT 漂移 + 校正扩展到 19 图 | ✅ 已完成 | 20 图，λ 扫描 + 消融，transition-only +5.65 dB |
+| 9.3 | 真实编辑 benchmark（P2P-style prompt-changed） | ✅ 已完成 | Phase 7，20 对评估 |
+| 9.4 | 指纹与架构拓扑对应关系表 | ✅ 已完成 | `arch_topo_fingerprint_mapping.png` |
 
 ## 待办：提升竞争力
 
