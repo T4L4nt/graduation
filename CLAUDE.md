@@ -450,4 +450,7 @@ DiT 最优 λ=**0.9**，与 SD 1.5 的 λ=0.7 不同——DiT 反演质量更差
 
 - **LAMS-Edit**（最接近，开环混合）→ **Prompt-to-Prompt**（交叉注意力）→ **DiffStateGrad**（SVD 低秩）
 
+**跨架构逐层分析**：
+- **FeatureInject / One Size Does Not Fit All**（OpenReview 2025, id=slCmiGEX1D，最大新颖性风险点）：跨架构（SDXL/SD3.5/FLUX）逐层特征注入，分析语义表示**在哪里形成**。三层区分：(1) 他们分析**前向生成**、从不反演，反演-重建一致性这一研究对象在其工作中不存在；(2) **漂移位置 ≠ 语义形成位置**——四架构中三个漂移峰落在其 formation 带外（SD1.5 decoder末端、FLUX joint_18、HunyuanDiT blocks.20），仅 SDXL 重合且用 info-funnel 机理诚实解释；(3) 他们无反演/无校正/无理论/无 Flow Matching。对照图：`outputs/phase7_editing/formation_vs_drift_comparison.png`（`scripts/phase7_formation_vs_drift.py`）。
+
 **差异化定位**：诊断驱动 + 理论解释 + 跨架构验证 + 内存优势 + 统计等价于 P2P。线性插值不是我们的发明——RLI 已独立发现类似形式——我们的贡献是**发现 Architecture Fingerprint** 这一规律，以及**诊断→定位→极简干预**的范式：一旦通过逐层诊断定位了架构瓶颈，最简线性校正即可达到复杂方法的同等效果。简单性是诊断的必然结果，而非调参的偶然发现。

@@ -18,7 +18,7 @@ Why does diffusion inversion fail? Is feature drift random noise, or does it exh
 
 ## 二、一句话学术主张（Thesis Statement）
 
-扩散反演中的特征漂移具有清晰的**架构级结构**——漂移模式由 backbone 的 attention 拓扑（single-stream vs dual-stream, CNN skip vs residual stream）决定，而非采样器 artifact。这一发现（Architecture Fingerprint）将反演失败从黑盒问题转变为可诊断、可预测、可干预的结构系统。作为自然推论，最简 latent 线性校正即可有效——简单性是诊断充分的必然结果。
+扩散反演中的特征漂移具有清晰的**架构级结构**——漂移模式由 backbone 的 attention 拓扑（single-stream vs dual-stream, CNN skip vs residual stream）决定，而非采样器 artifact。这一发现（Architecture Fingerprint）将反演失败从黑盒问题转变为可诊断、可预测、可干预的结构系统。**更进一步，漂移指纹不仅可被观测，还可被预测**：给定一个新的扩散 backbone，其漂移集中的位置与形状可从 (a) 信息流图、(b) skip/residual 结构、(c) 跨模态交互边界三要素预测——这使 Architecture Fingerprint 从描述性陈述升级为预测性框架。作为自然推论，最简 latent 线性校正即可有效——简单性是诊断充分的必然结果。
 
 ---
 
@@ -163,6 +163,7 @@ P2P vs Ours：Cohen's d=0.033（统计等价），内存低数百倍。
 | 简单性的定位 | 需要"辩护"的特征 | "简单是因为诊断告诉我们不需要复杂" |
 | 创新点数量 | 2 个并列 | **1 个核心发现 + 1 个工程验证** |
 | Claim 密度 | 高（信息论+流形+收敛+因果+拓扑） | **低**（聚焦 Architecture Fingerprint） |
+| 指纹的地位 | 描述性（观测到漂移有结构） | **预测性**（可从架构拓扑预测漂移位置——他人结构上无法拥有的主张） |
 
 ## 七、Figure 1 建议
 
@@ -173,6 +174,8 @@ Figure 1 应该围绕 **Architecture Fingerprint** 而不是 PSNR 提升：
 - 核心信息：**这是一个新现象——漂移有结构，结构由架构决定**
 
 不要用 Figure 1 展示"我们提升了多少 dB"——那是方法论文的套路。
+
+**Figure 2 建议（预测性框架）**：把 `outputs/phase7_editing/arch_topo_fingerprint_mapping.png` 定位为论文的**预测性证据**，而非事后描述——它展示四架构的 (信息流图 + skip/residual + 跨模态边界) 如何**预测**各自漂移指纹的位置。配套 `outputs/phase7_editing/formation_vs_drift_comparison.png` 作为差异化证据（见 §十、§十一）：漂移位置 ≠ 语义形成位置，四架构中三个漂移峰落在 FeatureInject 的 formation 带之外。
 
 ## 八、当前已有的支撑
 
@@ -197,3 +200,41 @@ Figure 1 应该围绕 **Architecture Fingerprint** 而不是 PSNR 提升：
 1. **因果干预实验** ⭐：修改 SD 1.5 attention 结构（如切断某条 skip connection），观察 drift fingerprint 是否改变。将"架构与漂移相关"升级为"架构决定漂移"
 2. **更多架构/checkpoint**：如不同规模的 DiT、SD 不同版本，增强 Architecture Fingerprint 的泛化性证据（当前 4 架构已经不错，可放 Limitations）
 3. **Statistical rigor**：给跨架构 correlation 加 confidence interval、multiple seeds
+
+---
+
+## 十、Related Work 防御性定位（可直接入论文）
+
+针对 `novelty-risk-report.md` 识别出的两个真实风险（RLI 公式等价、FeatureInject 跨架构逐层分析），以下为可直接写入第 2 章相关工作的定位文字。
+
+### §2.2 内容保持 — 与 RLI 的关系（承认公式，翻转叙事）
+
+RLI（Jo et al., ICCVW 2025）提出的残差线性插值在数学形式上与我们的校正公式等价（$f_{out}=f_{recon}+\lambda(f_{inv}-f_{recon})$）。我们**不回避这一点，反而将其作为正面佐证**：两个独立团队殊途同归，共同验证了线性插值的有效性。关键差异在于：
+
+- **RLI 是一个技巧，我们提供一个框架**。RLI 从"平滑 attention 突变减少编辑伪影"的启发式动机出发，一律在 self-attention 层实施插值；它无法针对不同架构指定"该在哪里介入"。
+- **RLI 在结构上是我们框架的 UNet 特例**。我们的逐层诊断揭示：在具有 UNet 式 skip connection 的架构上，校正信号可跨层自由传播，因而"注入位置不敏感"（random5≈top5）——RLI 的一律插值恰好落在这一区间因而有效。但在纯 Transformer（HunyuanDiT）上，**选对层至关重要**：transition 区域单独校正 +5.65 dB，远超跨区域 top5 的 +2.50 dB。RLI 的启发式在这类架构上不再有理由成立。这是"诊断驱动 vs 启发式"的直接、可测量的区分。
+- **理论深度**：RLI 提供直观动机，我们从信息论（因果消融 + 互信息估计）解释线性插值**为何**有效、**何时**有效。
+
+### §2.3 特征空间分析 — 与 FeatureInject 的关系（最大风险点）
+
+FeatureInject / *One Size Does Not Fit All*（OpenReview 2025, id=slCmiGEX1D）是与本文最接近的跨架构逐层分析工作，覆盖 SD1.4/SD2/SDXL/Kandinsky 与 DiT（SD3.5, FLUX）。必须明确引用并区分。三层区分：
+
+1. **研究对象根本不同——他们从不反演**。FeatureInject 分析的是**前向生成轨迹**中语义表示在哪里形成（通过将原图轨迹的激活注入编辑轨迹）。本文的研究对象是**反演-重建往返的一致性**——反演在哪里丢失可恢复信息。反演-重建这一管线在 FeatureInject 中完全不存在。这是最不可攻破的区分。
+2. **"漂移位置 ≠ 语义形成位置"（定量证据）**。二者空间上相关（同架构驱动），但不等同。我们将 FeatureInject 的 formation zone 与我们测得的 drift profile 叠加对比（图见下），发现**四个架构中三个的漂移全局峰落在其 formation 带之外**：
+   - SD 1.5：formation 在瓶颈（晚 encoder/早 decoder），但漂移全局峰在 decoder 末端 `up_blocks.2.resnets.0`（归一化深度 0.70，带外）。
+   - FLUX（唯一直接可比模型，双方都研究）：他们 formation 在最后 transformer 块，我们漂移峰在 `joint_18`（最后 joint 块，归一化 0.32）与 early single blocks——明显分歧。
+   - HunyuanDiT：漂移峰在 `blocks.20`（0.51），早于 SD3.5 类比的 mid-late formation 带。
+   - SDXL：唯一重合（都在瓶颈）——我们**诚实标注**并用信息论 funnel 机理解释（放大→信息瓶颈移至 mid_block，形成与漂移在此共址但成因不同）。
+   > 一个反例即足以确立独立性：decoder 末端是无语义形成意义的漂移热点。可视化：`outputs/phase7_editing/formation_vs_drift_comparison.png`（`scripts/phase7_formation_vs_drift.py`）。
+3. **FeatureInject 没有的东西**：无反演分析、无校正方法、无理论框架（信息论/流形/收敛）、无 Flow Matching 跨范式验证。我们把逐层分析结果转化为可预测的架构指纹并进一步转化为校正方法。
+
+---
+
+## 十一、Discussion：与并发逐层分析工作的关系（组合壁垒）
+
+任何单一维度都可能被部分覆盖——公式（RLI）、跨架构逐层观测（FeatureInject）——但**诊断 + 三理论框架 + 极简校正 + 跨架构 + 跨范式（含 Flow Matching）+ 从描述升级为预测**的组合，在现有文献中无先例。护城河不是某个技术点，而是**叙事完整性**：Discovery（漂移是可预测的架构指纹）→ Understanding（信息论解释为何有结构）→ Exploitation（诊断充分后最简校正即最优）。
+
+两个元层次贡献进一步抬高壁垒：
+
+- **"简单性是诊断的必然结果"**：我们不是发明了线性插值，而是发现了线性插值就够了——feature-level 注入无效（−0.27 dB）、DCSC 闭环控制无增益等负结果共同支撑这一点。诚实报告"复杂方法不 work"在 DL 论文中罕见，构成诚实性溢价。
+- **描述 → 预测**：从"漂移有结构"升级到"漂移指纹可从架构拓扑预测"，是 RLI 与 FeatureInject 结构上都无法拥有的主张（前者是技巧，后者是前向生成的事后观测）。
