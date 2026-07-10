@@ -688,8 +688,8 @@ def plot_sd15_vs_sdxl_comparison(sdxl_results, cut_up_idx, out_path):
                     np.std(sdxl_lpips) if sdxl_lpips else 0),
     }
 
-    for ax, (metric, (sd15_v, _, c15)) in enumerate(
-        zip(axes, sd15_data.items())):
+    for ax, (metric, sd15_tuple) in zip(axes, sd15_data.items()):
+        sd15_v = sd15_tuple[0]
         sdxl_mean, sdxl_std = sdxl_data[metric]
 
         ax.bar(["SD 1.5"], [sd15_v], color="#3498db", width=0.4,
