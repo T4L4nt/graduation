@@ -527,15 +527,61 @@ DiT 最优 λ=**0.9**，与 SD 1.5 的 λ=0.7 不同——DiT 反演质量更差
 
 ### 核心发现
 
-1. **架构拓扑直接导致漂移指纹**：切断 peak skip → 漂移大幅下降 27.7%。机理：skip connection 引入 encoder-decoder 特征不匹配，切断消除了不匹配源（但重建质量可能下降——decoder 失去了有用的 encoder 信息）
-2. **效应是位置特异的（拓扑效应，非容量效应）**：两个 cut 移除等量信息，但 Cut A 改变 31/38 层而 Cut B 仅改变 5/38 层。Δ 图 r=−0.395（反相关）——不同位置产生不同空间模式，排除容量解释
-3. **三层预测框架具备干预能力**：不仅能被动描述漂移指纹，还能预测"在哪里做干预会产生什么效应"
+1. **架构拓扑直接导致漂移指纹**：切断 peak skip → 漂移大幅下降 27.7%。机理：skip connection 引入 encoder-decoder **特征冲突**——编码器特征与解码器重建路径不一致，导致漂移和重建误差。
+
+2. **重建质量反直觉提升**：Cut A 的 PSNR **+2.20 dB** (p=0.0005)，SSIM +0.060，LPIPS −0.099。切断冲突源 → 漂移↓ **且** 重建↑。这与初始预测相反——skip connection 在反演-重建场景下是**有害的**，它引入的特征冲突同时导致漂移和重建误差。
+
+3. **噪声注入完成因果链**：Noise A（高斯噪声替换 skip，保持统计特性但摧毁结构信息）→ 峰值漂移 +6.4%（比原始更差）。完整排序：Noise > Original > Zero。随机干扰比结构化冲突更严重。
+
+4. **效应是位置特异的（拓扑效应，非容量效应）**：两个 cut 移除等量信息，但 Cut A 改变 31/38 层而 Cut B 仅改变 5/38 层。Δ 图 r=−0.395（反相关）——不同位置产生不同空间模式，排除容量解释。
+
+5. **三层预测框架具备干预能力**：不仅能被动描述漂移指纹，还能预测"在哪里做干预会产生什么效应"。
+
+### 重建质量测量（19 图，50 步 DDIM）
+
+| 条件 | PSNR | SSIM | LPIPS | 峰值漂移 |
+|------|------|------|-------|---------|
+| Cut A (α=0.00) | 24.66 ± 3.90 | 0.693 ± 0.152 | 0.119 ± 0.054 | 1684 (−27.7%) |
+| **Noise A** | **24.85 ± 3.90** | **0.698 ± 0.149** | **0.113 ± 0.045** | **2480 (+6.4%)** |
+| α=0.25 | 23.10 ± 3.06 | 0.656 ± 0.141 | 0.169 ± 0.066 | — |
+| α=0.50 | 23.02 ± 3.07 | 0.649 ± 0.146 | 0.182 ± 0.089 | ~1978 |
+| α=0.75 | 22.57 ± 3.02 | 0.635 ± 0.148 | 0.212 ± 0.096 | — |
+| Original (α=1.00) | 22.44 ± 3.00 | 0.633 ± 0.150 | 0.218 ± 0.095 | 2329 |
+| Cut B (低漂移 skip) | 22.35 ± 2.98 | 0.631 ± 0.149 | 0.224 ± 0.096 | 2348 (+0.8%) |
+
+### 三级因果梯度
+
+**Level 1 — 二元干预**：Cut A 27.7%漂移↓ +2.20 dB PSNR↑；Cut B 无显著变化。拓扑效应 r=−0.395 排除容量解释。
+
+**Level 2 — 机制分离（噪声注入）**：Noise A 漂移↑6.4% 但 PSNR↑2.4 dB——打破了漂移-质量相关性。skip 携带的是**结构化冲突**，随机噪声不携带冲突模式，所以即使 L2 漂移更大，感知质量 (LPIPS 0.113 vs 0.218) 反而大幅提升。
+
+**Level 3 — 连续剂量-响应**：α↓ → PSNR 单调↑，没有"最优调制点"——α=0 就是最优。skip 在任何强度下都有害。SSIM 和 LPIPS 完全一致（α=0: SSIM 0.693, LPIPS 0.119; α=1.0: SSIM 0.633, LPIPS 0.218）。
+
+### 核心发现（修正后）
+
+1. **skip connection 是冲突源，不是信息源**：在反演-重建场景下，encoder skip 引入的特征与 decoder 路径**冲突**，导致漂移和重建误差。切断冲突源 → 漂移↓且 PSNR↑（与最初预测的"失去有用信息"相反——这是一个通过实验证伪获得的更深层发现）。
+
+2. **结构化冲突 ≠ 一般干扰**：Noise A 的 L2 漂移更大但重建更好——证明 harm 来自冲突的**结构**（encoder-decoder 特征模式的特定不对齐），而非冲突的**量级**。
+
+3. **效应是位置特异的**：Cut B（低漂移 skip）无显著效应——架构拓扑精确决定了冲突在哪里发生。
+
+4. **剂量-响应验证因果性**：PSNR/SSIM/LPIPS 均随 α 单调变化，排除了混淆变量。
+
+### 完整因果链
+
+```
+架构拓扑 → Skip 连接位置 → 编码器-解码器特征冲突 → 漂移指纹 + 重建误差
+                                                      ↓
+                                          切断冲突源 → 漂移↓ + 重建↑
+                                          噪声替换    → 漂移↑ (更差)
+```
 
 ### 论文定位
 
-主文 Discovery 章最后一小节（~0.3 页），一张三列对比图 + Δ 图。核心叙事：
-> "To verify the framework's predictive nature, we performed causal interventions by surgically cutting skip connections at inference time. The framework correctly predicted which intervention would alter the fingerprint (Cut A, peak region) and which would preserve it (Cut B, low-drift region). Anti-correlated delta maps (r=−0.395) rule out a trivial capacity-effect explanation."
+主文 Discovery 章最后一小节（~0.5 页），一张四条件对比图 + Δ 图 + 重建质量表。核心叙事：
+> "Causal interventions on skip connections validate the framework's predictive nature. Cutting the peak skip (Cut A) fundamentally altered the fingerprint (31/38 layers p<0.05) while improving reconstruction (+2.2 dB PSNR), revealing that the skip introduces harmful encoder-decoder feature mismatch. Cutting a low-drift skip (Cut B) preserved both fingerprint (5/38 layers significant) and quality. Noise injection (Noise A) increased drift beyond original, confirming that skip content—not capacity—determines the fingerprint. Anti-correlated delta maps (r=−0.395) rule out capacity-effect explanations."
 
-这是 ICLR 审稿人最看重的"因果干预"级别证据——从 FLUX(拟合) → SD3.5(held-out 预测验证) → SD 1.5 skip 干预(因果操纵) 的三级跳。
+证据链：FLUX(拟合) → SD3.5(held-out 预测+修正) → SD 1.5 skip 干预(因果操纵) → Noise injection(机制分离) → Reconstruction quality(意外发现→更深理解)
 
-脚本：`scripts/phase7_skip_intervention.py`，输出：`outputs/phase7_skip_intervention/`
+脚本：`scripts/phase7_skip_intervention.py`（主实验）、`scripts/phase7_skip_recon_quality.py`（重建质量）、`scripts/phase7_skip_noise_intervention.py`（噪声注入）、`scripts/phase7_skip_intervention_viz.py`（可视化）
+输出：`outputs/phase7_skip_intervention/`（含 `results.json`, `recon_quality.json`, `results_noise.json`, `prediction_record.json`, fig4a-d）
