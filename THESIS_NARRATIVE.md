@@ -49,7 +49,7 @@ Why does diffusion inversion fail? Is feature drift random noise, or does it exh
 | 漂移不是均匀的 | SD 1.5 中跨层差距达 1000× |
 | ResNet 漂移 >> Attention | ~5× 差距（与直觉相反） |
 | 跨架构漂移指纹各不相同 | SD 1.5 → decoder / SDXL → mid_block / DiT → blocks 11-21 / FLUX → early single + last joint |
-| 漂移是架构签名，不是采样器 artifact | 同 backbone 相似度高（FLUX vs DiT r=0.727），不同 backbone 低（FLUX vs SD 1.5 r=0.486） |
+| 漂移是架构签名，不是采样器 artifact | 同 backbone 相似度高（FLUX vs DiT r=0.723），不同 backbone 低（FLUX vs SD 1.5 r=0.486） |
 | 架构拓扑→漂移指纹可预测 | 信息流图 + skip/residual 结构 + 跨模态边界三要素决定漂移位置 |
 
 **学术贡献**：发现 Architecture Fingerprint——将扩散反演失败从黑盒问题转变为可诊断的结构系统。这是论文的核心贡献（descriptive contribution）。
@@ -197,9 +197,10 @@ Figure 1 应该围绕 **Architecture Fingerprint** 而不是 PSNR 提升：
 
 ## 九、可增强的方向（按优先级）
 
-1. **因果干预实验** ⭐：修改 SD 1.5 attention 结构（如切断某条 skip connection），观察 drift fingerprint 是否改变。将"架构与漂移相关"升级为"架构决定漂移"
-2. **更多架构/checkpoint**：如不同规模的 DiT、SD 不同版本，增强 Architecture Fingerprint 的泛化性证据（当前 4 架构已经不错，可放 Limitations）
-3. **Statistical rigor**：给跨架构 correlation 加 confidence interval、multiple seeds
+1. ~~**因果干预实验** ⭐：修改 SD 1.5 attention 结构（如切断某条 skip connection），观察 drift fingerprint 是否改变。~~ **Phase 7c 已完成**：Cut A 切断 peak skip → 漂移 −27.7%, PSNR +2.20 dB。Noise A 验证机制分离。SDXL 跨架构负结果（−11.59 dB）确立架构特异性。
+2. ~~**更多架构/checkpoint**：如不同规模的 DiT、SD 不同版本~~ **Phase 8a (SD 3.5) + Phase 8b (FLUX 消融) 已完成**。
+3. **FLUX Flow Matching 跨范式消融**：λ scan + 层组消融。**Phase 8b 已完成**：feature-level correction 对 λ 高度敏感（最优 0.1），joint_only = single_only = latent_all（Δ=+3.05），late_single 单独最优（+3.18）。
+4. **Statistical rigor**：给跨架构 correlation 加 confidence interval、multiple seeds（可放 Limitations）。
 
 ---
 

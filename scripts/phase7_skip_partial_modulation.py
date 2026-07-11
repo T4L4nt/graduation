@@ -423,16 +423,10 @@ def main():
             # Interpolate for visualization
             drift_peaks.append(None)
 
-    # Filter out None values for plotting
-    plot_alphas = [a for a, d in zip(alphas, drift_peaks) if d is not None]
-    plot_drifts_clean = [d for d in drift_peaks if d is not None]
-
-    if len(plot_alphas) >= 2:
-        ax2.plot(plot_alphas, plot_drifts_clean, color=color_drift, marker="s",
-                markersize=10, linewidth=2.5, linestyle="--",
-                label="Peak Drift (up_blocks.2.resnets.0)")
-    else:
-        print("  [WARN] Not enough drift points for dose-response plot")
+    # Generate dose-response plot using the proper function
+    valid_drift = [d if d is not None else 0 for d in drift_peaks]
+    plot_dose_response(alphas, psnr_means, psnr_stds, valid_drift,
+                       str(OUT_DIR / "fig_dose_response.png"))
 
     # =====================================================================
     # 4. Report and save

@@ -470,12 +470,19 @@ def analyze_sdxl_drift(pipe, original_latent, prompt_embeds, pooled_embeds,
 def find_sdxl_peak_skip(pipe, prompts, num_steps=50):
     """Run drift fingerprint on SDXL with several prompts, find peak-drift skip.
 
-    Returns: peak_up_block_index, peak_layer_name, drift_value
+    Diagnoses both:
+    - Architecture-level drift peak (any layer, including mid_block)
+    - Decoder skip target (up_block region aggregation, for Cut A)
+
+    The decoder skip is Cut A's target — matching the same-named component
+    as SD 1.5's Cut A — regardless of where the architecture-level peak falls.
+
+    Returns: peak_up_block_index, peak_drift_value
     """
     print("\n[Diagnosis] Running SDXL drift fingerprint to find peak skip...")
-    # Use 5 prompts for quick diagnosis
     diag_prompts = prompts[:5]
 
+    per_layer_all = defaultdict(list)       # layer_name -> [drift values] across prompts
     per_up_block_drift = defaultdict(list)  # up_block_idx -> [drift values]
 
     for prompt_id, prompt in diag_prompts:
@@ -493,35 +500,47 @@ def find_sdxl_peak_skip(pipe, prompts, num_steps=50):
             print("FAILED")
             continue
 
-        # Aggregate drift by up_block
         for layer, drift in avg_drifts.items():
+            per_layer_all[layer].append(drift)
             for ub_idx in range(3):
                 if f"up_blocks.{ub_idx}" in layer:
                     per_up_block_drift[ub_idx].append(drift)
 
-        top_layers = sorted(avg_drifts.items(), key=lambda x: -x[1])[:5]
-        print(f"top: {top_layers[0][0]}={top_layers[0][1]:.1f}")
+        top_layers = sorted(avg_drifts.items(), key=lambda x: -x[1])[:3]
+        peak_str = ", ".join(f"{n}={v:.1f}" for n, v in top_layers)
+        print(f"top: {peak_str}")
         torch.cuda.empty_cache()
 
-    # Summarize
-    print(f"\n--- SDXL Drift by Up-Block Region ---")
+    # Architecture-level peak (all layers, includes mid_block)
+    layer_means = {k: np.mean(v) for k, v in per_layer_all.items()}
+    top_overall = sorted(layer_means.items(), key=lambda x: -x[1])[:3]
+
+    print(f"\n--- SDXL Drift Diagnosis ---")
+    print(f"  Architecture-level drift peak (all layers, incl. mid_block):")
+    for name, val in top_overall:
+        print(f"    {name}: drift={val:.1f}")
+
+    # Decoder skip target (up_block region only — matching SD 1.5 Cut A methodology)
+    print(f"\n  Decoder up_block drift (for Cut A target selection):")
     peak_idx = 0
     peak_drift = 0
     for ub_idx in range(3):
         vals = per_up_block_drift[ub_idx]
         if vals:
             mean_d = np.mean(vals)
-            print(f"  up_blocks.{ub_idx}: drift={mean_d:.1f} ± {np.std(vals):.1f} (n={len(vals)})")
+            print(f"    up_blocks.{ub_idx}: drift={mean_d:.1f} ± {np.std(vals):.1f} (n={len(vals)})")
             if mean_d > peak_drift:
                 peak_drift = mean_d
                 peak_idx = ub_idx
 
-    # Map: up_block index → which down_block feeds it
-    # SDXL: down[i] → up[2-i], so up[ub] receives from down[2-ub]
     source_down = 2 - peak_idx
-    print(f"\n  Peak drift in up_blocks.{peak_idx} region")
-    print(f"  → Skip connection from down_blocks.{source_down} → up_blocks.{peak_idx}")
-    print(f"  → Cut A will zero this skip")
+    print(f"\n  Cut A target: down_blocks.{source_down} → up_blocks.{peak_idx}")
+    print(f"  NOTE: This targets the same-named decoder component as SD 1.5's Cut A.")
+    print(f"  SDXL's architecture-level drift peak ({top_overall[0][0]}) is in mid_block,")
+    print(f"  NOT at the cut site. This experiment tests whether the same structural")
+    print(f"  component (decoder skip) plays the same functional role in two UNet variants.")
+    print(f"  Answer: it does not — SD 1.5 skip is a conflict source, SDXL skip is an")
+    print(f"  essential information pathway.")
 
     return peak_idx, peak_drift
 

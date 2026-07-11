@@ -149,7 +149,7 @@ Pearson r > 0.95 across splits. Multi-seed measurement: σ/mean < 5%.
 backbone topologies.
 
 *Evidence:* 5 architectures, 10 pairwise comparisons. Pearson r range:
-[0.486, 0.790]. The highest correlation (SDXL vs HunyuanDiT) is driven by
+[0.486, 0.792]. The highest correlation (SDXL vs HunyuanDiT) is driven by
 normalization range compression (drift magnitude differs by ~1000×—see
 Appendix for per-architecture raw-scale plots). See Figure 2 for the
 5-curve overlay.

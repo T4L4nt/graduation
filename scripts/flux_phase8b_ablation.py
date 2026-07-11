@@ -25,9 +25,15 @@ N_SINGLE = 38
 
 
 def psnr_from_result(result, key="recon"):
-    """Extract PSNR from run_correction_feature result."""
-    m = result.get(f"metrics_{key}", result.get("metrics", {}))
-    return m.get("PSNR", float("nan"))
+    """Extract PSNR from run_correction_feature result.
+
+    run_correction_feature returns flat keys: baseline_PSNR, corr_PSNR, etc.
+    key="recon" -> baseline_PSNR, key="corrected" -> corr_PSNR.
+    """
+    if key == "recon":
+        return result.get("baseline_PSNR", float("nan"))
+    else:
+        return result.get("corr_PSNR", float("nan"))
 
 
 def main():

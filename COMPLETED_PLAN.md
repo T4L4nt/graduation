@@ -129,8 +129,9 @@
 | 8.7 | 第 7 章 讨论 | ⬜ 未开始 | — |
 | 8.8 | 第 8 章 结论 | ⬜ 未开始 | — |
 | 8.9 | 答辩 PPT | ⬜ 未开始 | — |
-| 8.10 | THESIS_NARRATIVE.md 更新（加入 FLUX） | ⬜ 未开始 | Phase 6 完成 |
+| 8.10 | THESIS_NARRATIVE.md 更新（加入 FLUX） | ✅ | Phase 6 + 7c + 8 内容已加入 |
 | 8.11 | INNOVATION_POINTS.md | ✅ | 2026-07-08 重写，移除自适应 λ |
+| 8.12 | ICLR_PAPER_DEFINITIONS.md | ✅ | v3.1, 包含 Claim-Evidence-Conclusion |
 
 ---
 
@@ -150,3 +151,30 @@
 | 10.1 | 论文写作（8 章） | 高 | 实验数据齐全 |
 | 10.2 | 更多 baseline（LEDITS++, InfEdit, PnP, MasaCtrl） | 中 | 现有对比已覆盖主要方法 |
 | 10.3 | 扩充测试集至 50+ 张 | 低 | 19 张已有统计检验，若盲审要求可追加 |
+
+---
+
+## Phase 7c：Skip Connection 因果干预 ✅
+
+| # | 任务 | 状态 | 产出 |
+|---|------|------|------|
+| 7c.1 | Cut A (peak skip) 干预实验 | ✅ | 31/38 层 p<0.05, 漂移 −27.7%, PSNR +2.20 dB |
+| 7c.2 | Cut B (低漂移 skip) 对照 | ✅ | 5/38 层显著, 无重建影响 |
+| 7c.3 | Noise A 噪声注入（机制分离） | ✅ | 漂移 +6.4%, PSNR +2.40 dB (打破漂移-质量相关性) |
+| 7c.4 | 部分调制剂量-响应 (α ∈ [0,1]) | ✅ | PSNR 随 α↓ 单调上升, 2026-07-10 重跑验证 |
+| 7c.5 | SDXL 跨架构因果验证 | ✅ | −11.59 dB（相反效应） |
+
+---
+
+## Phase 8：ICLR 补充实验 ✅
+
+| # | 任务 | 状态 | 产出 |
+|---|------|------|------|
+| 8a.1 | 跨 prompt 验证 (25 prompts) | ✅ | ΔPSNR +1.31, p=0.0012 |
+| 8b.1 | 编辑验证 (25 tasks × 3 conditions) | ✅ | CLIP-Dir → 0 for Cut A/Noise A |
+| 8c.1 | SDXL 跨架构因果验证 | ✅ | −11.59 dB（见 7c.5） |
+| 8d.1 | FLUX feature-level λ scan (5 图) | ✅ | 最优 λ=0.1, +1.38 dB |
+| 8d.2 | FLUX 层组消融 (19 图) | ✅ | joint=single=latent=+3.05, late_single=+3.18 |
+| 8d.3 | EDICT/NTI 补齐 4 缺失图 | ✅ | 所有方法现基于相同 19 图 |
+
+**关键发现**："Single > Joint" 预测证伪, "注入位置鲁棒" 跨架构复现, late_single 揭示 residual stream 方向性。
