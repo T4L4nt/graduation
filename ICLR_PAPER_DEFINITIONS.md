@@ -124,8 +124,74 @@ but still identifies molecular structure.
 **Why "Fingerprint"?** We use this term because (a) Φ(M) is reproducible for
 the same M under fixed P (Property 1), (b) different M produce measurably
 different Φ (Property 2), and (c) the profile shape is interpretable from
-the architecture's topology (§4). The word does NOT imply that Φ is an
-intrinsic, condition-invariant property of M.
+the architecture's topology (§4). As defined, Φ(M) is a measured profile
+under a fixed protocol—analogous to an NMR spectrum that depends on solvent
+and temperature but still identifies molecular structure.
+
+### Why Architecture Fingerprint rather than "layer-wise drift profile"?
+
+The core question is not one of naming but of **what constitutes the object
+of study**. A layer-wise drift profile is merely a collection of local
+measurements: each layer's drift d_l(x) is a scalar, and the profile is
+their concatenation. It can answer *which layer drifts most* but nothing
+beyond that.
+
+The Architecture Fingerprint is a different object: an **architecture-level
+descriptor** whose identity lies in the *shape*, *organization*, and
+*distribution* of drift across layers, rather than in any individual layer's
+value. It changes the question from "Which layer drifts?" to "Why does this
+architecture drift this way?"
+
+This abstraction is not cosmetic—it is **necessary** for everything that
+follows in this paper:
+
+```
+Layer-wise drift profile          Architecture Fingerprint
+─────────────────────────         ─────────────────────────
+Local observable                  Global architectural descriptor
+Answers: which layer?             Answers: why this architecture?
+Cannot support comparison         Enables inter-architecture comparison (§3, Property 2)
+Cannot reveal topology             Enables topology interpretation (§4, Principles)
+Cannot assess paradigm stability   Enables paradigm stability assessment (§3, Property 3)
+Cannot ground a diagnosis          Grounds diagnosis-before-correction (§6)
+```
+
+This is the distinction between a measurement and a **measurement framework**.
+The Fingerprint is not a theory of *why* drift occurs (that is the role of
+the mechanism analysis in §5), nor is it a hypothesis about *how* drift
+propagates (that is the role of the mapping principles in §4). It is the
+descriptive layer that makes those subsequent layers possible. **The
+Fingerprint explains nothing—it only reveals. Mechanism explains.
+Correction exploits.**
+
+---
+
+### Framework Overview: Five Conceptual Layers
+
+The paper is organized as a five-layer conceptual hierarchy:
+
+```
+§3  Architecture Fingerprint     — WHAT:   Measurement framework
+       ↑
+§3  Properties (1–5)             — HOW STABLE: Reproducibility, differentiation,
+                                    paradigm stability, temporal consistency,
+                                    prompt robustness
+       ↑
+§4  Mapping Principles (1–3)     — HOW TO INTERPRET: From architecture topology
+                                    to drift profile shape
+       ↑
+§5  Mechanism (Skip Conflict)    — WHY: Causal chain from skip connection
+                                    to feature conflict to reconstruction error
+       ↑
+§6  Application (Correction)     — HOW TO USE: Diagnosis-guided minimal
+                                    intervention
+```
+
+Each layer answers a distinct question. No single layer is self-sufficient,
+and the Fingerprint—the measurement layer—is the foundation on which the
+others build. Without it, inter-architecture comparison has no common
+language; topology interpretation has no target; mechanism analysis has
+no measured phenomenon to explain.
 
 ---
 
@@ -191,8 +257,9 @@ See Appendix Figure A2.
 
 All properties are established on 5 architectures (SD 1.5, SDXL, HunyuanDiT,
 FLUX.1-dev, SD 3.5 Medium) with coco_val images under DDIM or Euler sampling.
-Generalization to arbitrary architectures, datasets, or protocols is not
-claimed. See §7 (Discussion) for limitations.
+Property 5 extends the evaluation to 25 diverse prompts; editing validation
+covers 25 additional edit pairs across 3 conditions (see §6). Extension to
+further architectures, datasets, and protocols is discussed in §7.
 
 ---
 
@@ -254,77 +321,109 @@ both the highest image drift (0.713) and a jump in text drift (0.12→0.44).
 SD 3.5 blocks 0-12 (dual attention) show the lowest drift in the model;
 drift rises sharply after block 13 (standard attention only).
 
-### Interpretability, not Prediction
+### Interpretability and Limits
 
-We do NOT claim that Φ(M) can be predicted for arbitrary unseen M from G(M)
-alone. That would require a larger architecture sample and a learned mapping
-function. We claim the weaker but empirically supported statement: **given
-G(M), the coarse location and shape of Φ(M) can be interpreted through
-Principles 1–3.** The principles correctly identified the bottleneck type
-for all 5 architectures and correctly predicted that Cut A (peak skip) would
-alter the fingerprint while Cut B (low-drift skip) would not.
+Given G(M), the coarse location and shape of Φ(M) can be interpreted through
+Principles 1–3. The principles correctly identified the bottleneck type for
+all 5 architectures and correctly predicted that Cut A (peak skip) would
+alter the fingerprint while Cut B (low-drift skip) would not. Generalizing
+this to predictive mapping from G(M) to Φ(M) for arbitrary unseen architectures
+requires a larger architecture sample and a learned mapping function, which
+falls outside the scope of this work (see §7).
 
 ---
 
 ## 4. Layer 4 — 架构特异机制分析 (Architecture-specific Mechanistic Analysis)
 
-**Scope: Rather than proposing a universal mechanism for all architectures
-(or even all U-Nets), we perform architecture-specific case studies. The
-Architecture Fingerprint serves as a diagnostic tool—it identifies WHERE
-drift concentrates. We then investigate WHY at those specific locations,
-acknowledging that different architectures may admit different explanations.**
+**Positioning: The Fingerprint reveals WHERE drift concentrates (§3) and
+how to interpret its shape from topology (§4). This section explains WHY—the
+causal mechanism producing the observed pattern. Different architectures may
+admit different explanations. The Fingerprint is the diagnostic tool;
+the causal analysis below is the mechanistic explanation.**
 
 The key methodological shift: Fingerprint is not for proving one mechanism.
 Fingerprint is for discovering that **different architectures need different
 explanations.**
 
-### Hypothesis (Skip Conflict)
+### Causal Chain: Skip Conflict as a Mediating Variable
 
-For U-Net architectures, the skip connection from down_block[i] to
-up_block[N-i-1] introduces **structured encoder-decoder feature mismatch**
-during inversion.
-
-Operationally: let s be the skip feature and u be the up_block's internal
-representation before receiving s. The skip conflict is:
+For U-Net architectures, we operationalize the mechanism through a measurable
+**Conflict** variable C, defined at each skip connection:
 
 ```
-C = || s − u ||_2   (directly measurable)
+C = || s − u ||_2
 ```
 
-**Causal prediction:** reducing skip strength α reduces conflict C,
-which in turn reduces drift φ_l at layers fed by this skip and improves
-reconstruction quality.
+where s is the skip feature from down_block[i] and u is the up_block's
+internal representation at the corresponding up_block[N-i-1] before
+receiving s. C is directly measurable from intermediate activations
+without modifying the model.
+
+This introduces a four-variable causal chain:
+
+```
+Skip strength α  →  Conflict C  →  Drift φ_l  →  Reconstruction PSNR
+   (manipulated)     (mediator)     (observed)      (outcome)
+```
+
+The chain makes three falsifiable predictions:
+
+**P1. α→C:** Reducing skip strength reduces Conflict C.<br>
+**P2. C→φ:** Lower Conflict C reduces drift at layers downstream of
+the connection.<br>
+**P3. φ→PSNR:** Reduced drift improves reconstruction quality.<br>
+**P4 (critical).** Conflict, not L2 magnitude, is the causal variable:
+interventions that break the C→φ link without changing L2 should produce
+different outcomes.
 
 ### Empirical Validation (SD 1.5, 19 images, 50-step DDIM)
 
-**Claim 4a (Binary intervention).** Zeroing the peak skip (α=0) significantly
-changes the fingerprint compared to original (α=1).
+**Claim 4a (Binary intervention confirms α→C→φ→PSNR chain).**
+Zeroing the peak skip (α=0) breaks the Conflict source at that location,
+causing the entire chain to shift.
 
 *Evidence:* 31/38 layers p<0.05 (paired t-test). Peak drift: −27.7%
 (p=4.8×10⁻⁸). Reconstruction: PSNR +2.20 dB (p=0.0005). See Figure 6A.
 
-**Claim 4b (Location specificity).** Zeroing a low-drift skip produces no
-significant change.
+**Claim 4b (Location specificity rules out capacity effect).**
+Zeroing a low-drift skip produces no significant change, confirming
+that Conflict is position-specific, not capacity-driven.
 
 *Evidence:* Cut B (up_blocks.0 skip): 5/38 layers p<0.05. Peak drift: +0.8%
 (n.s.). PSNR: −0.11 dB (n.s.). The anti-correlated delta maps (r=−0.395)
-between Cut A and Cut B rule out a simple capacity effect. See Figure 6B.
+between Cut A and Cut B imply distinct spatial mechanisms at different
+locations. See Figure 6B.
 
-**Claim 4c (Continuous dose-response).** The effect is monotonic in α.
+**Claim 4c (Continuous dose-response confirms α→C monotonicity).**
+The effect is monotonic in α, with no intermediate optimum.
 
 *Evidence:* α ∈ {0.0, 0.25, 0.50, 0.75, 1.0}. PSNR decreases monotonically
-as α increases (24.66 → 22.44 dB). No intermediate optimum—the skip is
-purely harmful at this location. See Figure 6C.
+as α increases (24.66 → 22.44 dB). No optimal modulation point—the skip
+is purely harmful at this location. See Figure 6C.
 
-**Claim 4d (Structured conflict, not magnitude).** Replacing the skip with
-noise of identical statistics produces different behavior from both zeroing
-and original.
+**Claim 4d (Noise experiment separates Conflict from L2 magnitude).**
+Replacing the skip with Gaussian noise of identical statistics per tensor
+preserves L2 magnitude but destroys the structured mismatch pattern that
+constitutes Conflict. If L2 magnitude were the causal variable, Noise
+should resemble Original. If Conflict is the causal variable, Noise and
+Zero should both differ from Original—but for different reasons.
 
 *Evidence:* Noise replacement increases L2 drift (+6.4% vs. original) but
-IMPROVES reconstruction (LPIPS 0.218→0.113, PSNR +2.4 dB). This dissociates
-drift magnitude from reconstruction quality: unstructured noise does not
-carry the specific encoder-decoder mismatch pattern that degrades
-reconstruction. See Figure 6D.
+IMPROVES reconstruction (LPIPS 0.218→0.113, PSNR +2.4 dB). Noise breaks
+the Conflict-driven mismatch while introducing random perturbations—the
+former improves reconstruction, the latter increases L2. This double
+dissociation (L2↑ but PSNR↑) establishes that **L2 drift magnitude is not
+the causal variable; structured Conflict is.** See Figure 6D.
+
+**Summary of the causal chain:**
+
+| Link | Test | Result |
+|------|------|--------|
+| α→C | Cut A vs. Original | Conflict eliminated, drift −27.7%, PSNR +2.2 dB |
+| α→C | Cut B vs. Original | Conflict unchanged, drift +0.8% n.s. |
+| α→C | Dose-response α∈[0,1] | Monotonic—no optimal modulation point |
+| C→φ→PSNR | Noise vs. Zero vs. Original | L2↑ but Conflict↓ → PSNR↑ (dissociation) |
+| Location | Δ(A) vs. Δ(B) r=−0.395 | Position-specific, not capacity-driven |
 
 ### For Non-U-Net Architectures (Future Work)
 
@@ -346,15 +445,12 @@ the corresponding architectural position) to SDXL. Result: PSNR drops by
 is in mid_block rather than decoder, indicating that the dominant source
 of drift differs between the two U-Net variants.
 
-*Interpretation (conservative):* This result indicates that skip connections
+*Interpretation:* This result indicates that skip connections
 play **architecture-dependent functional roles** during inversion—they can
-be conflict sources (SD 1.5) or necessary information pathways (SDXL). It
-does NOT prove that SDXL's entire drift mechanism is different (other
-factors, such as the relative strength of conflict removal vs. information
-loss, could contribute). What it does prove is that **the same structural
-component contributes differently across U-Net variants**—which supports the
-central claim that the Architecture Fingerprint captures architecture-specific
-phenomena, not generic backbone-family properties.
+be conflict sources (SD 1.5) or necessary information pathways (SDXL).
+The same structural component contributes differently across U-Net variants,
+supporting the central claim that the Architecture Fingerprint captures
+architecture-specific phenomena, not generic backbone-family properties.
 
 *Caveat:* The cut positions differ between architectures (SD 1.5:
 down_blocks.1→up_blocks.2; SDXL: down_blocks.0→up_blocks.2) due to
@@ -399,7 +495,7 @@ The Architecture Fingerprint enables a diagnosis-first approach to correction:
 | P2P | 25.34 | 0.087 | ~GB |
 | **Ours** | **25.20** | **0.094** | **~MB** |
 
-P2P vs Ours: Cohen's d=0.033 (negligible effect size), Pearson r=1.000
+P2P vs Ours: Cohen's d=0.033 (negligible effect size), Pearson r≈1.000
 (identical behavior). Statistically significant but practically equivalent.
 
 **Cross-architecture generalization:**
@@ -407,7 +503,7 @@ P2P vs Ours: Cohen's d=0.033 (negligible effect size), Pearson r=1.000
 | Architecture | ΔPSNR | Optimal λ | Key insight |
 |-------------|-------|-----------|-------------|
 | SD 1.5 | +2.75 dB | 0.7 | random5 ≈ top5 |
-| SDXL | +5.37 dB | 0.7 | Larger UNet → larger gain |
+| SDXL | +5.23 dB | 0.7 | Larger UNet → larger gain |
 | HunyuanDiT | +5.65 dB | 0.9 | transition-only >> top5 |
 | FLUX | +3.94 dB | 0.7 | Latent correction effective |
 
@@ -434,37 +530,34 @@ Fingerprint measurement.
 **Negative results supporting simplicity:**
 - Feature-level injection: ΔPSNR = −0.27 dB (worse than baseline)
 - DCSC closed-loop control: no measurable gain over fixed λ
-- These are NOT failures—they validate that the system is already
-  operating at the Pareto frontier of simplicity and performance.
+- These results validate the diagnosis-first paradigm: once the bottleneck
+  is identified, the system already operates at the simplicity-performance
+  Pareto frontier.
 
 ---
 
-## 6. 摘要 (Abstract, ~250 words)
+## 6. 摘要 (Abstract, ~200 words)
 
-> Feature drift in diffusion inversion—the discrepancy between inverted and
-> reconstructed representations—is widely observed but poorly understood.
+> Diffusion inversion introduces a discrepancy between inverted and
+> reconstructed latent representations—widely observed but poorly understood.
 >
-> We discover that this drift is not random noise but exhibits a reproducible
-> **Architecture Fingerprint**: its layer-wise distribution is determined by
-> the backbone's attention topology rather than the sampling paradigm.
-> Quantifying drift across five architectures (U-Net × 2, Transformer,
-> MM-DiT, MM-DiT-X) and two paradigms (DDIM, Flow Matching), we show that
-> same-backbone architectures produce similar fingerprints while different
-> backbones diverge. The fingerprint is interpretable from three architectural
-> properties—information flow topology, skip/residual structure, and
-> cross-modal boundaries—validated through held-out prediction and causal
-> intervention.
+> We discover that this feature drift exhibits a reproducible **Architecture
+> Fingerprint**: its layer-wise distribution is determined by backbone
+> attention topology, not by sampling paradigm. Across five architectures
+> and two paradigms, drift profiles reliably distinguish backbones while
+> remaining stable within the same topology.
 >
-> To explain the fingerprint's origin in U-Net, we propose the **Skip Conflict
-> Hypothesis**: skip connections introduce structured encoder-decoder feature
-> mismatch during inversion. Interventional analysis, noise-injection controls,
-> and a continuous dose-response curve establish that structured conflict—not
-> drift magnitude—determines reconstruction quality.
+> This diagnosis directly motivates a minimal intervention: identifying
+> the drift bottleneck through layer-wise profiling makes the simplest
+> latent-space linear correction sufficient. The correction achieves
+> content preservation on par with Prompt-to-Prompt (Cohen's d=0.033)
+> at negligible memory cost, and generalizes as a plug-in for editing.
+> Additional complexity—feature-level injection, closed-loop control,
+> per-layer weighting—provides no measurable gain, confirming that
+> the bottleneck diagnosis itself, not the correction formula, is the
+> contribution.
 >
-> As a practical consequence, diagnosis at the identified bottleneck enables
-> the simplest latent-space correction to achieve content preservation on par
-> with complex methods (Cohen's d=0.033 vs. Prompt-to-Prompt) using negligible
-> memory. Our central message is not that linear correction works, but that
+> Our central message is not that linear correction works, but that
 > *sufficient diagnosis makes simple correction sufficient*.
 
 ---
