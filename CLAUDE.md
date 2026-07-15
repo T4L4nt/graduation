@@ -129,11 +129,19 @@ FLUX feature-level correction 对 λ **高度敏感**——最优在极小值（
 ## 开发环境
 
 - conda 环境 `grad`（Python 3.10），激活：`conda activate grad`
-- GPU：NVIDIA RTX PRO 6000 Blackwell (48GB)
+- GPU：NVIDIA RTX PRO 6000 Blackwell (48GB), CUDA 13.0
 - PyTorch 2.11.0+cu128, diffusers 0.38.0, transformers 5.12.1
 - 主模型：`runwayml/stable-diffusion-v1-5`（已缓存）
 - CLIP：`openai/clip-vit-large-patch14`（已缓存，需 `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1` 离线运行）
 - 运行脚本时需 `export PYTHONPATH=scripts:$PYTHONPATH`
+- **NCCL 库修复**：CUDA 13.0 驱动与 PyTorch cu128 的 NCCL 有符号冲突，需 preload nvidia-nccl-cu12 的 libnccl
+  ```bash
+  LD_PRELOAD="$(python -c 'import nvidia.nccl; print(nvidia.nccl.__path__[0])')/lib/libnccl.so.2" python script.py
+  ```
+  或固定路径：
+  ```bash
+  LD_PRELOAD="/home/hiaskc/miniconda3/envs/grad/lib/python3.10/site-packages/nvidia/nccl/lib/libnccl.so.2" python script.py
+  ```
 
 ---
 

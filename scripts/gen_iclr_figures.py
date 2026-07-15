@@ -126,7 +126,7 @@ def fig2_fingerprint():
 
     ax.set_xlabel("Layer Index (interpolated)", fontsize=11, color=C_DARK)
     ax.set_ylabel("Normalized Drift Φ(M)", fontsize=11, color=C_DARK)
-    ax.set_title("Architecture Fingerprints: 5 Backbones, 2 Paradigms",
+    ax.set_title("Architecture Fingerprints: 4 Backbones, 2 Paradigms",
                 fontsize=13, fontweight="bold", color=C_DARK)
     ax.legend(fontsize=9, loc="upper right", framealpha=0.8)
     ax.grid(alpha=0.25)
@@ -244,7 +244,7 @@ def fig5_application():
     # --- Panel B: Cross-architecture ---
     ax = fig.add_subplot(gs[1])
     archs = ["SD 1.5", "SDXL", "HunyuanDiT", "FLUX"]
-    delta_psnr = [2.75, 5.37, 5.65, 3.94]
+    delta_psnr = [2.75, 5.23, 5.65, 3.94]
     colors_bar = [C_ARCH[a] for a in archs]
     ax.barh(range(len(archs)), delta_psnr, color=colors_bar, height=0.5,
            edgecolor="white", linewidth=0.8)

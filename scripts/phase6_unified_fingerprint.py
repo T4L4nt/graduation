@@ -332,13 +332,13 @@ def main():
     plot_similarity_matrix(arch_names, similarity)
 
     # Print key comparisons
-    print("\nKey pairwise similarities (Pearson r):")
+    print("\nKey pairwise similarities (Spearman ρ primary, Pearson r reference):")
     for i in range(len(arch_names)):
         for j in range(i + 1, len(arch_names)):
             r = similarity["Pearson r"][i, j]
             s = similarity["Spearman ρ"][i, j]
             print(f"  {arch_names[i]:30s} vs {arch_names[j]:30s}  "
-                  f"r={r:.3f}, ρ={s:.3f}")
+                  f"ρ={s:.3f}, r={r:.3f}")
 
     # Highlight architecture determinism finding
     dit_idx = [i for i, n in enumerate(arch_names) if "DiT" in n]

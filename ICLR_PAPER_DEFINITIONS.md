@@ -216,29 +216,42 @@ Multi-seed measurement (3 seeds × 5 images): σ/mean = 0.1% per layer.
 backbone topologies.
 
 *Evidence:* 4 architectures in unified comparison (SD 1.5, SDXL, HunyuanDiT,
-FLUX.1-dev), 6 pairwise comparisons. Pearson r range: [0.486, 0.792].
-SD 3.5 Medium as a 5th held-out architecture (see §4, Principle 1).
-The highest correlation (SDXL vs HunyuanDiT, r=0.792) is driven by
-normalization range compression (drift magnitude differs by ~1000×—see
-Appendix for per-architecture raw-scale plots). See Figure 2 for the
-4-curve overlay.
+FLUX.1-dev), 6 pairwise comparisons. We report Spearman ρ (rank correlation)
+as the primary metric because it is robust to the extreme range differences
+between architectures (raw drift magnitudes span ~10^4× before normalization).
+
+Same-backbone pairs (Spearman ρ):
+- SD 1.5 vs SDXL (both UNet): **ρ = 0.796** — highest overall
+- DiT vs FLUX (both Transformer): **ρ = 0.722**
+
+Cross-backbone pairs (Spearman ρ):
+- SD 1.5 vs DiT: ρ = 0.382 — lowest overall
+- SD 1.5 vs FLUX: ρ = 0.407
+- SDXL vs FLUX: ρ = 0.538
+- SDXL vs DiT: ρ = 0.641
+
+Pearson r is reported for completeness (range [0.486, 0.792]), but can be
+inflated by min-max normalization compression: architectures with a single
+dominant peak (SDXL, DiT) produce deceptively high Pearson r after compression
+to [0,1] even when their rank structures differ (SDXL vs DiT: r=0.792 but
+ρ=0.641). See Figure 2 for the 4-curve overlay and Figure 3C for the full
+similarity matrix with all three metrics (Spearman ρ, Pearson r, Cosine).
 
 ### Property 3 (Backbone Dominance over Sampling Paradigm)
 
-The Pearson r matrix from the 4-architecture unified comparison reveals
-a hierarchy: same-backbone pairs (e.g., FLUX vs HunyuanDiT, r=0.723) are
-more similar than cross-backbone pairs (e.g., FLUX vs SD 1.5, r=0.486),
-even when the same-backbone pair crosses the DDIM/Flow-Matching paradigm
-boundary. This suggests that backbone topology contributes more to Φ than
-sampling paradigm—though a direct within-architecture paradigm comparison
-is not possible (FLUX does not support DDIM inversion).
+The Spearman ρ matrix reveals a clear hierarchy: same-backbone pairs are
+systematically more similar than cross-backbone pairs, even when the
+same-backbone pair crosses the DDIM/Flow-Matching paradigm boundary.
+This suggests that backbone topology contributes more to Φ than sampling
+paradigm—though a direct within-architecture paradigm comparison is not
+possible (FLUX does not support DDIM inversion).
 
-*Evidence:* 4-architecture Pearson r matrix. FLUX (Flow Match) vs HunyuanDiT
-(DDIM v-pred): r=0.723 (same Transformer backbone, different paradigm).
-FLUX (Flow Match) vs SD 1.5 (DDIM): r=0.486 (different backbone, different
-paradigm). The FLUX-HunyuanDiT similarity exceeds FLUX-SD 1.5 similarity
-despite the paradigm difference. See Figure 3C and Appendix for the full
-similarity matrix.
+*Evidence:* Spearman ρ matrix. DiT vs FLUX: ρ=0.722 (same Transformer
+backbone, DDIM v-pred vs Flow Match). SD 1.5 vs FLUX: ρ=0.407 (different
+backbone, different paradigm). The Transformer pair's similarity exceeds
+the cross-backbone pair despite the paradigm difference. Same-backbone
+UNet pair (SD 1.5 vs SDXL: ρ=0.796) is the highest of all. See Figure 3C
+and Appendix for the full similarity matrix.
 
 ### Property 4 (Temporal Consistency)
 
