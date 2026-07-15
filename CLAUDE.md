@@ -50,7 +50,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
-## Phase 8：SD 3.5 预测验证 + FLUX 消融补全 🔴
+## Phase 8：SD 3.5 预测验证 + FLUX 消融补全 ✅
 
 ### 8a：SD 3.5 预测验证（P0，~1 天）
 
@@ -105,6 +105,27 @@ FLUX feature-level correction 对 λ **高度敏感**——最优在极小值（
 
 ---
 
+## 2026-07-12 审查修复记录 🔧
+
+**Claim–Evidence 审计**（详见 `ICLR_PAPER_DEFINITIONS.md`）：
+
+| 修复项 | 内容 |
+|--------|------|
+| Property 1 (Reproducibility) | 补 LOOCV 实验，r=1.000, σ/mean=0.1% → `outputs/phase1_reproducibility/` |
+| Property 3 降级 | "Paradigm Stability" → "Backbone Dominance"，诚实承认范式对比是间接的 |
+| 架构计数修正 | "5 archives, 10 pairwise" → "4 unified + 1 held-out (SD 3.5), 6 pairwise" |
+| Phase 8b λ 标注 | 消融表头 λ=0.7 → λ=0.1（实际最优值） |
+| Euler 表 DiT N | N=19, ~16 dB, +5.65 → N=3*, 15.24 dB, +4.67 |
+| Pearson r | =1.000 → ≈1.000（4 处修正） |
+| Abstract 压缩 | 250→~180 words，砍掉 Mechanism 独立段 |
+| 防御性写作 | 删除/改写 5 处 "We do NOT claim" / "does NOT prove" |
+| Necessity 论证 | 新增 "Why Architecture Fingerprint rather than layer-wise drift profile?" |
+| Mechanism 升级 | Skip Conflict 从观察升级为四变量因果链（α→C→φ→PSNR） |
+| SD 3.5 text drift | 记录 v2 预测证伪（dual=0.057 vs joint=0.181） |
+| FLUX 校正验证 | joint_only=single_only=latent_all 经 3 图 per-image 确认（非 bug） |
+
+---
+
 ## 开发环境
 
 - conda 环境 `grad`（Python 3.10），激活：`conda activate grad`
@@ -120,6 +141,9 @@ FLUX feature-level correction 对 λ **高度敏感**——最优在极小值（
 
 - **脚本**：`scripts/phase1_diagnostics.py`
 - **输出**：`outputs/phase1/layer_drift_summary.json`（19 图 coco_val）
+- **Property 1 验证**：`outputs/phase1_reproducibility/reproducibility.json`
+  - LOOCV Pearson r = 1.000（19 折，min=1.000）
+  - Multi-seed σ/mean = 0.1%（3 seeds × 5 images）
 - **关键发现**：
   - 漂移在 UNet 层间极不均匀——跨层差距达 1000×
   - 漂移集中在 decoder up_blocks ResNet（`up_blocks.2.resnets.0` 跨图最高）

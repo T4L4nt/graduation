@@ -88,7 +88,7 @@
 | # | 架构 | 诊断 | 校正 | 产出 |
 |---|------|------|------|------|
 | 6.1 | SD 1.5 (UNet) | ✅ | ✅ | decoder up_blocks 集中, Δ=+2.50 dB |
-| 6.2 | SDXL (UNet) | ✅ `sdxl_phase1_diagnostics.py` | ✅ `sdxl_phase2_full.py` | mid_block 集中, Δ=+5.37 dB |
+| 6.2 | SDXL (UNet) | ✅ `sdxl_phase1_diagnostics.py` | ✅ `sdxl_phase2_full.py` | mid_block 集中, Δ=+5.23 dB |
 | 6.3 | HunyuanDiT (Transformer) | ✅ `dit_phase1_diagnostics.py` | ✅ `dit_phase2_full.py` | blocks 11-21 集中, Δ=+5.65 dB |
 | 6.4 | FLUX (MM-DiT) | ✅ `flux_phase6_diagnosis.py` | ✅ `flux_phase6c_analysis.py` | dual-peak, Δ=+3.94 dB |
 

@@ -152,7 +152,7 @@ Local observable                  Global architectural descriptor
 Answers: which layer?             Answers: why this architecture?
 Cannot support comparison         Enables inter-architecture comparison (§3, Property 2)
 Cannot reveal topology             Enables topology interpretation (§4, Principles)
-Cannot assess paradigm stability   Enables paradigm stability assessment (§3, Property 3)
+Cannot compare across paradigms    Enables backbone-vs-paradigm comparison (§3, Property 3)
 Cannot ground a diagnosis          Grounds diagnosis-before-correction (§6)
 ```
 
@@ -174,7 +174,7 @@ The paper is organized as a five-layer conceptual hierarchy:
 §3  Architecture Fingerprint     — WHAT:   Measurement framework
        ↑
 §3  Properties (1–5)             — HOW STABLE: Reproducibility, differentiation,
-                                    paradigm stability, temporal consistency,
+                                    backbone dominance, temporal consistency,
                                     prompt robustness
        ↑
 §4  Mapping Principles (1–3)     — HOW TO INTERPRET: From architecture topology
@@ -206,30 +206,39 @@ no measured phenomenon to explain.
 and across random seeds, under fixed measurement protocol.
 
 *Evidence:* 19 coco_val images, leave-one-out cross-validation.
-Pearson r > 0.95 across splits. Multi-seed measurement: σ/mean < 5%.
-(SD 1.5, 50-step DDIM. Replicated on SDXL, HunyuanDiT, FLUX.)
+Pearson r = 1.000 (mean across 19 folds, min = 1.000).
+Multi-seed measurement (3 seeds × 5 images): σ/mean = 0.1% per layer.
+(SD 1.5, 50-step DDIM. Data: `outputs/phase1_reproducibility/reproducibility.json`.)
 
 ### Property 2 (Inter-architecture Differentiation)
 
 Φ(M_A) and Φ(M_B) are measurably different for M_A ≠ M_B with different
 backbone topologies.
 
-*Evidence:* 5 architectures, 10 pairwise comparisons. Pearson r range:
-[0.486, 0.792]. The highest correlation (SDXL vs HunyuanDiT) is driven by
+*Evidence:* 4 architectures in unified comparison (SD 1.5, SDXL, HunyuanDiT,
+FLUX.1-dev), 6 pairwise comparisons. Pearson r range: [0.486, 0.792].
+SD 3.5 Medium as a 5th held-out architecture (see §4, Principle 1).
+The highest correlation (SDXL vs HunyuanDiT, r=0.792) is driven by
 normalization range compression (drift magnitude differs by ~1000×—see
 Appendix for per-architecture raw-scale plots). See Figure 2 for the
-5-curve overlay.
+4-curve overlay.
 
-### Property 3 (Paradigm Stability)
+### Property 3 (Backbone Dominance over Sampling Paradigm)
 
-Changing the sampling paradigm (DDIM vs. Flow Matching) produces a smaller
-change in Φ than changing the architecture.
+The Pearson r matrix from the 4-architecture unified comparison reveals
+a hierarchy: same-backbone pairs (e.g., FLUX vs HunyuanDiT, r=0.723) are
+more similar than cross-backbone pairs (e.g., FLUX vs SD 1.5, r=0.486),
+even when the same-backbone pair crosses the DDIM/Flow-Matching paradigm
+boundary. This suggests that backbone topology contributes more to Φ than
+sampling paradigm—though a direct within-architecture paradigm comparison
+is not possible (FLUX does not support DDIM inversion).
 
-*Evidence:* FLUX.1-dev measured under Euler Flow Matching vs. DDIM architectures.
-cos_sim(Φ_DDIM(FLUX), Φ_FM(FLUX)) is not directly measurable (FLUX does not
-support DDIM), but the Pearson r matrix supports this: architectures sharing
-backbone type have higher similarity than architectures sharing paradigm.
-See Figure 3C.
+*Evidence:* 4-architecture Pearson r matrix. FLUX (Flow Match) vs HunyuanDiT
+(DDIM v-pred): r=0.723 (same Transformer backbone, different paradigm).
+FLUX (Flow Match) vs SD 1.5 (DDIM): r=0.486 (different backbone, different
+paradigm). The FLUX-HunyuanDiT similarity exceeds FLUX-SD 1.5 similarity
+despite the paradigm difference. See Figure 3C and Appendix for the full
+similarity matrix.
 
 ### Property 4 (Temporal Consistency)
 
@@ -255,11 +264,13 @@ See Appendix Figure A2.
 
 ### Scope Declaration (Properties 1–5)
 
-All properties are established on 5 architectures (SD 1.5, SDXL, HunyuanDiT,
-FLUX.1-dev, SD 3.5 Medium) with coco_val images under DDIM or Euler sampling.
-Property 5 extends the evaluation to 25 diverse prompts; editing validation
-covers 25 additional edit pairs across 3 conditions (see §6). Extension to
-further architectures, datasets, and protocols is discussed in §7.
+Properties 1–3 are established on 4 architectures in unified comparison
+(SD 1.5, SDXL, HunyuanDiT, FLUX.1-dev) with SD 3.5 Medium as a 5th
+held-out validation (see Principle 1). All measurements use coco_val
+images under DDIM or Euler sampling. Property 5 extends the evaluation
+to 25 diverse prompts; editing validation covers 25 additional edit pairs
+across 3 conditions (see §6). Extension to further architectures, datasets,
+and protocols is discussed in §7.
 
 ---
 
@@ -283,12 +294,13 @@ The bottleneck type varies by backbone:
 | MM-DiT (dual-stream) | Joint → single modality handoff | last joint + early single blocks |
 | MM-DiT-X | Dual → standard attention transition | late output compression |
 
-*Validation:* For all 5 architectures, the observed drift peak location matches
-the independently identifiable information bottleneck. SD 3.5 served as
-held-out test: the prediction placed the peak at the dual→standard boundary;
-the observation placed it at late output compression, revealing a previously
-unrecognized bottleneck type. This partial falsification is reported honestly
-and led to framework refinement.
+*Validation:* For all 4 architectures in the unified comparison, the observed
+drift peak location matches the independently identifiable information
+bottleneck. SD 3.5 Medium served as a 5th held-out test: the prediction
+placed the peak at the dual→standard boundary; the observation placed it
+at late output compression, revealing a previously unrecognized bottleneck
+type. This partial falsification is reported honestly and led to framework
+refinement.
 
 ### Principle 2 (Propagation Mode)
 
@@ -543,7 +555,8 @@ Fingerprint measurement.
 >
 > We discover that this feature drift exhibits a reproducible **Architecture
 > Fingerprint**: its layer-wise distribution is determined by backbone
-> attention topology, not by sampling paradigm. Across five architectures
+> attention topology, not by sampling paradigm. Across four architectures
+> in unified comparison (with a fifth as held-out validation),
 > and two paradigms, drift profiles reliably distinguish backbones while
 > remaining stable within the same topology.
 >
@@ -576,7 +589,76 @@ Fingerprint measurement.
 
 ---
 
-## 8. v2 → v3 变更摘要
+## 8. 配图方案（5 张主图 + 2 张表）
+
+### 主文 8 页排版
+
+| 页码 | 内容 |
+|------|------|
+| Page 1 | Abstract + Introduction + **Figure 1** |
+| Page 2 | Related Work + Definition + **Figure 2** |
+| Page 3 | Properties + Experiments + **Table 1** |
+| Page 4 | Mapping Principles + **Figure 3** |
+| Page 5 | Mechanism (SD 1.5 + SDXL case studies) + **Figure 4** |
+| Page 6 | Application + **Figure 5** |
+| Page 7 | More experiments + **Table 2** |
+| Page 8 | Discussion + Conclusion |
+
+### 5 张主图
+
+| Figure | 科学问题 | 类型 | 状态 |
+|--------|---------|------|------|
+| Fig.1 | 这篇论文在干什么？ | draw.io 概念图 | ❌ 描述已给出 |
+| Fig.2 | Architecture Fingerprint 存在吗？ | 数据图 | ✅ `fig2_fingerprint.pdf` |
+| Fig.3 | Topology 能解释 Fingerprint 吗？ | 数据图 | ✅ `fig3_topology.pdf` |
+| Fig.4 | 为什么会这样？(SD1.5 vs SDXL) | draw.io 概念图 | ❌ 描述已给出 |
+| Fig.5 | 有什么用？(Diagnosis→Correction→Editing) | 数据图 | ✅ `fig5_application.pdf` |
+
+### Fig.1 描述
+
+横向三阶段布局（深色背景）：
+
+- **左 — Observation**: Source Image → Inversion → Reconstruction → f_inv ≠ f_recon → "Random noise? ✗ Architecture signal? ✓"
+- **中 — Discovery**: 5 架构漂移曲线叠加，不同颜色，峰位置不同。r(FLUX,DiT)=0.727, r(FLUX,SD1.5)=0.486, Backbone > Paradigm
+- **右 — Diagnosis → Correction**: Φ(M) → Peak Location → z ← z + λ(z_inv − z) → Edited result. LPIPS −40%, MB vs GB. "Diagnosis makes simple correction sufficient"
+
+Caption: "Feature drift is not random error but an architecture-dependent diagnostic signal."
+
+### Fig.4 描述
+
+左右对比 + 中间关键信息：
+
+- **左 — SD 1.5**: Encoder → down_blocks.1 → skip → up_blocks.2 (drift peak here). Cut skip → PSNR +2.2 dB. Skip = conflict source. Evidence: α=0 drift −27.7%, Noise: drift↑ PSNR↑, Dose-response monotonic
+- **中 — Key message**: "Same structural component, opposite functional role. The Fingerprint reveals architecture-specific behavior."
+- **右 — SDXL**: Encoder → down_blocks.0 → skip → up_blocks.2 (NOT drift peak, peak in mid_block). Cut skip → PSNR −11.6 dB. Skip = necessary information path. Evidence: ΔPSNR −11.59 dB, ΔSSIM −0.306, ΔLPIPS +0.447
+
+Caption: "The same structural component plays opposite functional roles in two U-Net variants, demonstrating that the Architecture Fingerprint captures instance-specific phenomena."
+
+### 2 张表
+
+| Table | 内容 |
+|-------|------|
+| Table 1 | Architecture summary (Model, Backbone, Paradigm, Peak layer, L) |
+| Table 2 | SOTA comparison (Method, PSNR, LPIPS, Memory, Training) |
+
+### 附录图（5-8 张）
+
+- Fingerprint stability (prompt/seed/cross-arch)
+- Normalization ablation
+- Full dose-response curves
+- MI estimation details
+- SDXL multi-position cut (future work)
+- Prediction record
+
+### 文件位置
+
+- 数据图: `fig2_fingerprint.pdf`, `fig3_topology.pdf`, `fig5_application.pdf` (仓库根目录)
+- 生成脚本: `scripts/gen_iclr_figures.py`
+- 概念图 Fig.1, Fig.4: 待 draw.io 手绘
+
+---
+
+## 9. v2 → v3 变更摘要
 
 | 问题 | v2 | v3 |
 |------|----|----|
