@@ -303,11 +303,12 @@ See Appendix Figure A1.
 The correction is effective across diverse prompts, confirming that
 the Fingerprint-based diagnosis does not depend on a specific prompt.
 
-*Evidence:* 25 prompts on SD 1.5. Correction ΔPSNR = +1.31 ± 1.75 dB
-(p=0.0012, Cohen's d=0.75). 13/25 prompts (52%) improved >1.0 dB;
-only 2/25 (8%) showed degradation. The correction generalizes beyond
-the empty-prompt condition used for Fingerprint measurement.
-See Appendix Figure A2.
+*Evidence:* 100 prompts on SD 1.5 (expanded from 25 in earlier version).
+Correction ΔPSNR = +1.88 ± 2.25 dB (p=5.15×10⁻¹³, Cohen's d=0.835,
+95% CI [1.45, 2.34]). 53/100 prompts (53%) improved >1.0 dB; 34/100 (34%)
+improved >2.0 dB; only 6/100 (6%) showed degradation. The correction
+generalizes beyond the empty-prompt condition used for Fingerprint
+measurement. See Appendix Figure A2.
 
 ---
 
