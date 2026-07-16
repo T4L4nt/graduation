@@ -4,7 +4,10 @@ Phase 6: Four-architecture unified drift fingerprint comparison.
 
 Loads drift data from SD 1.5, SDXL, DiT, and FLUX, then generates:
   1. Four-panel drift heatmap with per-architecture normalization
-  2. Architecture similarity matrix (Pearson r, cosine, Spearman rho)
+  2. Architecture similarity matrix (Spearman rho primary; Pearson r + Cosine reference)
+     NOTE: Pearson r on interpolated vectors inflates similarity between
+     sparse single-peak profiles (e.g., SDXL vs DiT r=0.792 but rho=0.641).
+     Spearman rho is less sensitive to this artifact and is the primary metric.
   3. Overlay plot of normalized drift profiles
 
 Pure CPU script — uses pre-computed JSON data.
@@ -217,7 +220,13 @@ def plot_four_panel_heatmap(all_data):
 # ---------------------------------------------------------------------------
 
 def compute_arch_similarity(all_data):
-    """Pairwise similarity between architecture drift profiles."""
+    """Pairwise similarity between architecture drift profiles.
+
+    NOTE: Pearson r on interpolated vectors inflates similarity between
+    sparse single-peak profiles (e.g., SDXL vs DiT: r=0.792 but rho=0.641).
+    Spearman rho is less sensitive to this artifact.
+    Primary metric: Spearman rho. Pearson r: reference only with caveats.
+    """
     arch_names = [d[3] for d in all_data]
     n = len(arch_names)
 
@@ -241,12 +250,16 @@ def compute_arch_similarity(all_data):
             cosine[i, j] = np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-8)
             spearman[i, j] = stats.spearmanr(a, b)[0]
 
-    return arch_names, {"Pearson r": pearson, "Cosine": cosine,
-                        "Spearman ρ": spearman}
+    return arch_names, {"Spearman ρ": spearman, "Pearson r": pearson,
+                        "Cosine": cosine}
 
 
 def plot_similarity_matrix(arch_names, similarity):
-    """3-panel similarity matrices."""
+    """3-panel similarity matrices. Spearman rho = primary, Pearson r = reference.
+
+    Pearson r on interpolated vectors is noted to inflate similarity between
+    sparse single-peak profiles (e.g., SDXL vs DiT r=0.792 vs rho=0.641).
+    """
     fig, axes = plt.subplots(1, 3, figsize=(18, 5.5))
 
     for ax, (metric_name, matrix) in zip(axes, similarity.items()):
@@ -264,12 +277,20 @@ def plot_similarity_matrix(arch_names, similarity):
         ax.set_yticks(range(len(arch_names)))
         ax.set_xticklabels(arch_names, rotation=45, ha="right", fontsize=8)
         ax.set_yticklabels(arch_names, fontsize=8)
-        ax.set_title(metric_name, fontsize=12, fontweight="bold")
+
+        # Mark primary metric
+        if "Spearman" in metric_name:
+            ax.set_title(metric_name + " (primary)", fontsize=12, fontweight="bold",
+                         color="#1a5276")
+        else:
+            ax.set_title(metric_name + " (reference)", fontsize=12, fontweight="bold")
 
         plt.colorbar(im, ax=ax, shrink=0.8)
 
-    fig.suptitle("Architecture Drift Profile Similarity", fontsize=14,
-                 fontweight="bold")
+    fig.suptitle("Architecture Drift Profile Similarity\n"
+                 "Spearman ρ = primary (rank-order, robust to sparse-peak artifact); "
+                 "Pearson r = reference (note: interpolated vectors inflate single-peak similarity)",
+                 fontsize=11, fontweight="bold")
     plt.tight_layout()
     fig.savefig(OUT_DIR / "arch_similarity_matrix.png", dpi=200)
     plt.close()
@@ -332,24 +353,41 @@ def main():
     plot_similarity_matrix(arch_names, similarity)
 
     # Print key comparisons
-    print("\nKey pairwise similarities (Spearman ρ primary, Pearson r reference):")
+    print("\nKey pairwise similarities (Spearman ρ = primary):")
     for i in range(len(arch_names)):
         for j in range(i + 1, len(arch_names)):
             r = similarity["Pearson r"][i, j]
             s = similarity["Spearman ρ"][i, j]
+            gap = abs(r - s)
+            # Flag large Pearson-Spearman gaps as potential interpolation artifacts
+            flag = " ⚠ Pearson-Spearman gap" if gap > 0.10 else ""
             print(f"  {arch_names[i]:30s} vs {arch_names[j]:30s}  "
-                  f"ρ={s:.3f}, r={r:.3f}")
+                  f"ρ={s:.3f}, r={r:.3f}{flag}")
 
-    # Highlight architecture determinism finding
+    # Check for interpolation artifact: SDXL vs DiT
+    sdxl_idx = [i for i, n in enumerate(arch_names) if "SDXL" in n]
     dit_idx = [i for i, n in enumerate(arch_names) if "DiT" in n]
+    if sdxl_idx and dit_idx:
+        r_artifact = similarity["Pearson r"][sdxl_idx[0], dit_idx[0]]
+        s_artifact = similarity["Spearman ρ"][sdxl_idx[0], dit_idx[0]]
+        if r_artifact - s_artifact > 0.10:
+            print(f"\n  ⚠  SDXL vs DiT: Pearson r={r_artifact:.3f} >> Spearman ρ={s_artifact:.3f}")
+            print("     This gap indicates interpolation artifact — both have sparse single-peak")
+            print("     profiles that look artificially similar when interpolated to 57 points.")
+            print("     SDXL (UNet bottleneck peak) and DiT (Transformer transition peak)")
+            print("     have mechanistically different drift causes despite the Pearson value.")
+
+    # Highlight backbone determinism (use Spearman)
     flux_idx = [i for i, n in enumerate(arch_names) if "FLUX" in n]
     if dit_idx and flux_idx:
+        s_transformer = similarity["Spearman ρ"][dit_idx[0], flux_idx[0]]
         r_transformer = similarity["Pearson r"][dit_idx[0], flux_idx[0]]
-        print(f"\n  >>> FLUX vs DiT (both Transformer, diff paradigm): r = {r_transformer:.3f}")
-        if r_transformer > 0.5:
-            print("  => Backbone dominates drift pattern (Transformer > paradigm)")
+        print(f"\n  >>> FLUX vs DiT (both Transformer, diff paradigm): "
+              f"ρ={s_transformer:.3f}, r={r_transformer:.3f}")
+        if s_transformer > 0.5:
+            print("  => Backbone dominates drift pattern (Spearman confirms, no artifact)")
         else:
-            print("  => Architecture details dominate (joint/single split != pure DiT)")
+            print("  => Architecture details dominate")
 
     print("\nGenerating drift profile overlay...")
     plot_drift_profile_overlay(all_data)

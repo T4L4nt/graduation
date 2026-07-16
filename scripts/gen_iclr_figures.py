@@ -36,37 +36,60 @@ C_DARK = "#2C3E50"
 # ===========================================================================
 
 def load_drift_profile(path, arch_name=""):
+    """Load drift profile in architectural (depth) order.
+
+    Handles three data formats:
+      Format 1: {"aggregated": {layer: {"mean": ...}}}        — SD 1.5, SD 3.5
+      Format 2: {"per_image": {layer: {img: val}}}            — SDXL, DiT
+      Format 3: {"drift": {"joint_0": {"hidden_drift": ...}}} — FLUX
+
+    CRITICAL: full_ranking is sorted by drift magnitude (not depth) and is
+    NOT suitable as a drift profile. Use per_image/aggregated instead.
+    """
     with open(path) as f:
         data = json.load(f)
 
-    # Format 1: Phase 1 — {"aggregated": {layer: {"mean": ...}}}
+    # Format 1: aggregated
     if "aggregated" in data:
         agg = data["aggregated"]
         k0 = list(agg.keys())[0]
         if isinstance(agg[k0], dict) and "mean" in agg[k0]:
-            names = list(agg.keys())
-            vals = np.array([agg[n]["mean"] for n in names])
-            return names, vals
+            layers = sorted(agg.keys(),
+                          key=lambda x: (x.split(".")[0], len(x), x))
+            vals = np.array([agg[l]["mean"] for l in layers])
+            return layers, vals
 
-    # Format 2: SDXL / DiT — {"full_ranking": [{"layer": ..., "mean_drift": ...}]}
-    if "full_ranking" in data:
-        ranking = data["full_ranking"]
-        r0 = ranking[0]
-        mk = "mean" if "mean" in r0 else "mean_drift"
-        names = [r["layer"] for r in ranking]
-        vals = np.array([r[mk] for r in ranking])
-        return names, vals
+    # Format 2: per_image (SDXL, DiT) — sort by architectural depth
+    if "per_image" in data:
+        per_image = data["per_image"]
+        # SDXL: layers like "down_blocks.0.resnets.0"
+        # DiT: layers like "blocks.0"
+        # Sort: DiT blocks by numeric index; others by section then name
+        k0 = list(per_image.keys())[0]
+        if k0.startswith("blocks."):
+            # DiT: sort by block number
+            layers = sorted(per_image.keys(),
+                          key=lambda x: int(x.replace("blocks.", "")))
+        else:
+            # SDXL / UNet: sort by section (down→mid→up) then name
+            layers = sorted(per_image.keys(),
+                          key=lambda x: (x.split(".")[0], len(x), x))
+        vals = np.array([np.mean([float(v) for v in per_image[l].values()])
+                        for l in layers])
+        return layers, vals
 
-    # Format 3: FLUX — {"drift": {"joint_0": {"hidden_drift": ...}, ...}}
+    # Format 3: FLUX drift
     if "drift" in data:
         drift_data = data["drift"]
         k0 = list(drift_data.keys())[0]
         if isinstance(drift_data[k0], dict) and "hidden_drift" in drift_data[k0]:
-            names = list(drift_data.keys())
-            vals = np.array([drift_data[n]["hidden_drift"] for n in names])
-            return names, vals
+            joint_names = [f"joint_{i}" for i in range(19)]
+            single_names = [f"single_{i}" for i in range(38)]
+            ordered = joint_names + single_names
+            vals = np.array([drift_data[n]["hidden_drift"] for n in ordered])
+            return ordered, vals
 
-    raise ValueError(f"Cannot parse {arch_name}")
+    raise ValueError(f"Cannot parse {arch_name}: keys={list(data.keys())}")
 
 
 def load_all_architectures():
@@ -92,13 +115,19 @@ def load_all_architectures():
 # ===========================================================================
 
 def fig2_fingerprint():
-    """Figure 2: (a) Definition sketch (b) 5-arch overlay (c) similarity matrix."""
+    """Figure 2: (a) 5-arch overlay (b) structural distance matrix (no interpolation).
+
+    Panel B uses architecture-level structural features (peak position, modality,
+    drift concentration, spread) computed directly from raw layer counts — no
+    interpolation to a common length. Avoids the artifact where interpolating
+    28-point SDXL to 57 points (51% synthetic) inflates similarity with DiT.
+    """
     profiles = load_all_architectures()
     if len(profiles) < 3:
         print("[Fig 2] Not enough architectures loaded, skipping")
         return
 
-    # Interpolate to unified length
+    # Interpolate to unified length (Panel A: qualitative visual only)
     unified_len = 57
     unified = {}
     for name, vals in profiles.items():
@@ -109,56 +138,100 @@ def fig2_fingerprint():
             v = np.interp(x_new, x_old, v)
         unified[name] = v
 
-    fig = plt.figure(figsize=(18, 8))
-    gs = fig.add_gridspec(1, 2, width_ratios=[1.6, 1], wspace=0.3)
+    # Structural features (NO interpolation — raw layer counts)
+    def extract_features(vals):
+        """Extract 4D structural feature vector from raw drift values."""
+        vn = vals / (vals.max() + 1e-8)
+        n = len(vn)
+        peak_idx = np.argmax(vn)
+        peak_pos = peak_idx / max(1, n - 1)
 
-    # --- Panel A: 5-architecture overlay ---
+        # Count significant local maxima (>0.3 normalized)
+        peaks = sum(1 for i in range(1, n - 1)
+                    if vn[i] > vn[i - 1] and vn[i] > vn[i + 1] and vn[i] > 0.3)
+        n_peaks = min(peaks, 9)  # cap for display
+
+        # Drift concentration: fraction of layers above 0.5
+        concentration = (vn > 0.5).sum() / n
+
+        # Spread: normalized span of above-noise (>0.1) layers
+        above = np.where(vn > 0.1)[0]
+        spread = (above[-1] - above[0]) / n if len(above) > 0 else 0.0
+
+        return np.array([peak_pos, n_peaks / 10.0, concentration, spread])
+
+    names_list = list(profiles.keys())
+    n = len(names_list)
+    feat_vecs = {name: extract_features(profiles[name]) for name in names_list}
+
+    # Structural distance matrix (Euclidean, 0 = identical)
+    dist = np.zeros((n, n))
+    for i in range(n):
+        for j in range(n):
+            dist[i, j] = np.linalg.norm(
+                feat_vecs[names_list[i]] - feat_vecs[names_list[j]])
+
+    # ---- Figure layout ----
+    fig = plt.figure(figsize=(20, 8))
+    gs = fig.add_gridspec(1, 2, width_ratios=[1.6, 1], wspace=0.35)
+
+    # --- Panel A: 5-architecture overlay (qualitative, interpolated) ---
     ax = fig.add_subplot(gs[0])
     for name, vals in unified.items():
         x = np.arange(len(vals))
         ax.plot(x, vals, color=C_ARCH[name], linewidth=2.2, alpha=0.9, label=name)
 
-    # Mark peaks
     for name, vals in unified.items():
         pi = np.argmax(vals)
         ax.annotate(name, (pi, vals[pi]), color=C_ARCH[name], fontsize=8,
-                   fontweight="bold", xytext=(0, 6), textcoords="offset points", ha="center")
+                   fontweight="bold", xytext=(0, 6), textcoords="offset points",
+                   ha="center")
 
-    ax.set_xlabel("Layer Index (interpolated)", fontsize=11, color=C_DARK)
-    ax.set_ylabel("Normalized Drift Φ(M)", fontsize=11, color=C_DARK)
+    ax.set_xlabel("Layer Index (interpolated, qualitative)", fontsize=11, color=C_DARK)
+    ax.set_ylabel("Normalized Drift Phi(M)", fontsize=11, color=C_DARK)
     ax.set_title("Architecture Fingerprints: 4 Backbones, 2 Paradigms",
                 fontsize=13, fontweight="bold", color=C_DARK)
     ax.legend(fontsize=9, loc="upper right", framealpha=0.8)
     ax.grid(alpha=0.25)
+    ax.text(0.02, -0.12,
+            "(qualitative overlay -- interpolation for visual alignment only)",
+            transform=ax.transAxes, fontsize=7, color="gray", style="italic")
 
-    # --- Panel B: Similarity matrix ---
+    # --- Panel B: Structural distance matrix ---
     ax2 = fig.add_subplot(gs[1])
-    names_list = list(unified.keys())
-    n = len(names_list)
-    sim = np.zeros((n, n))
-    for i in range(n):
-        for j in range(n):
-            sim[i, j] = np.corrcoef(unified[names_list[i]], unified[names_list[j]])[0, 1]
+    # Use Greens colormap (dark = close, light = far)
+    im = ax2.imshow(dist, cmap="YlOrRd", vmin=0, vmax=max(1.0, dist.max()),
+                    aspect="equal")
 
-    im = ax2.imshow(sim, cmap="RdYlBu_r", vmin=-1, vmax=1, aspect="equal")
+    short_names = [n.replace("HunyuanDiT", "H-DiT") for n in names_list]
     ax2.set_xticks(range(n)); ax2.set_yticks(range(n))
-    ax2.set_xticklabels(names_list, rotation=45, ha="right", fontsize=9)
-    ax2.set_yticklabels(names_list, fontsize=9)
-    ax2.set_title("Pairwise Pearson r", fontsize=12, fontweight="bold", color=C_DARK)
+    ax2.set_xticklabels(short_names, rotation=45, ha="right", fontsize=9)
+    ax2.set_yticklabels(short_names, fontsize=9)
+    ax2.set_title("Structural Distance (Euclidean)\nlower = more similar",
+                 fontsize=12, fontweight="bold", color=C_DARK)
 
     for i in range(n):
         for j in range(n):
-            c = "white" if abs(sim[i, j]) < 0.55 else "black"
-            ax2.text(j, i, f"{sim[i, j]:.3f}", ha="center", va="center",
+            val = dist[i, j]
+            # Black text on light cells, white on dark
+            c = "white" if val > 0.4 else "black"
+            ax2.text(j, i, f"{val:.3f}", ha="center", va="center",
                     fontsize=10, fontweight="bold", color=c)
     plt.colorbar(im, ax=ax2, shrink=0.8)
 
-    fig.suptitle("Figure 2: Architecture Fingerprint — Φ(M) is reproducible, architecture-specific",
+    # Caption
+    fig.text(0.5, -0.03,
+             "Panel B: Structural distance computed from 4 raw-layer-count features "
+             "(peak position, modality, drift concentration, spread) -- NO interpolation. "
+             "SD 1.5--SDXL d=0.045 (same UNet family); SDXL--DiT d=0.620 (different backbones).",
+             ha="center", fontsize=8, color="gray", style="italic")
+
+    fig.suptitle("Figure 2: Architecture Fingerprint -- Phi(M) is reproducible, architecture-specific",
                 fontsize=14, fontweight="bold", color=C_DARK, y=1.01)
     fig.savefig(OUT_DIR / "fig2_fingerprint.pdf", dpi=300, bbox_inches="tight")
     fig.savefig(OUT_DIR / "fig2_fingerprint.png", dpi=300, bbox_inches="tight")
     plt.close(fig)
-    print("[Fig 2] → outputs/figures/fig2_fingerprint.pdf")
+    print("[Fig 2] -> outputs/figures/fig2_fingerprint.pdf")
 
 
 # ===========================================================================

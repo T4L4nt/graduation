@@ -1,7 +1,7 @@
 """
 Phase 8 ICLR — Task A: Cross-Prompt Statistical Validation of Skip Intervention
 
-≥25 diverse prompts × SD 1.5 generation → DDIM inversion → Cut A vs Original
+100 diverse prompts × SD 1.5 generation → DDIM inversion → Cut A vs Original
 reconstruction. Computes PSNR/SSIM/LPIPS + peak drift + significant layers per prompt.
 
 Output:
@@ -42,45 +42,124 @@ OUT_DIR = Path("outputs/phase8_iclr_cross_prompt")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
-# 25 Diverse prompts covering 6 categories
+# 100 Diverse prompts covering 8 categories (expanded from 25 for ICLR revision)
 # ---------------------------------------------------------------------------
 DIVERSE_PROMPTS = [
-    # Portraits (4)
+    # Portraits (12)
     ("portrait_01", "a professional headshot of a woman with natural lighting"),
     ("portrait_02", "a candid street portrait of an elderly man with wrinkles"),
     ("portrait_03", "a young child laughing, soft window light"),
     ("portrait_04", "a muscular athlete posing after training, dramatic lighting"),
+    ("portrait_05", "a woman with curly hair reading a book by a window"),
+    ("portrait_06", "a group of friends laughing together at a dinner table"),
+    ("portrait_07", "a businessman in a suit staring out of a skyscraper window"),
+    ("portrait_08", "an elderly woman knitting in a rocking chair, warm light"),
+    ("portrait_09", "a teenage girl with headphones listening to music in her room"),
+    ("portrait_10", "a firefighter in full gear, soot-covered face after a rescue"),
+    ("portrait_11", "a ballet dancer stretching at the barre, morning light"),
+    ("portrait_12", "a fisherman on a wooden dock at dawn, silhouette"),
 
-    # Landscapes (4)
+    # Landscapes (14)
     ("landscape_01", "a mountain lake at sunrise with mist over the water"),
     ("landscape_02", "a vast desert with sand dunes and a lone cactus"),
     ("landscape_03", "a snowy pine forest with a wooden cabin, winter morning"),
     ("landscape_04", "a tropical beach with palm trees and turquoise water"),
+    ("landscape_05", "rolling green hills with wildflowers under a blue sky"),
+    ("landscape_06", "a thunderstorm over a wheat field, dark dramatic clouds"),
+    ("landscape_07", "a cherry blossom avenue in full bloom, spring afternoon"),
+    ("landscape_08", "an abandoned lighthouse on a rocky cliff at sunset"),
+    ("landscape_09", "a rice terrace cascading down misty mountains"),
+    ("landscape_10", "the northern lights over a frozen lake, starry sky"),
+    ("landscape_11", "a bustling harbor at golden hour with fishing boats"),
+    ("landscape_12", "a bamboo forest path with sunlight filtering through"),
+    ("landscape_13", "a volcanic landscape with steam vents and black sand"),
+    ("landscape_14", "a river canyon with layered red rock walls at noon"),
 
-    # Animals (4)
+    # Animals (12)
     ("animal_01", "a golden retriever puppy sitting in a flower garden"),
     ("animal_02", "a bald eagle soaring over a canyon, wings spread"),
     ("animal_03", "a white cat sleeping on a windowsill, afternoon sun"),
     ("animal_04", "a herd of wild horses galloping across a prairie"),
+    ("animal_05", "a school of colorful tropical fish in a coral reef"),
+    ("animal_06", "a red fox peeking out from behind a snow-covered log"),
+    ("animal_07", "a hummingbird hovering next to a bright red flower"),
+    ("animal_08", "a giant panda eating bamboo in a misty forest"),
+    ("animal_09", "a owl perched on a gnarled tree branch at twilight"),
+    ("animal_10", "a pod of dolphins jumping out of the ocean at sunrise"),
+    ("animal_11", "a peacock displaying its full plumage in a garden"),
+    ("animal_12", "a wolf howling at the full moon on a rocky ridge"),
 
-    # Objects (4)
+    # Objects (14)
     ("object_01", "a vintage film camera on a wooden table, macro shot"),
     ("object_02", "a steaming cup of coffee next to an open book"),
     ("object_03", "a classic red sports car parked on a coastal road"),
     ("object_04", "a handcrafted ceramic vase with dried flowers"),
+    ("object_05", "a pair of worn leather boots by a fireplace"),
+    ("object_06", "a shiny brass trumpet on a velvet chair under spotlights"),
+    ("object_07", "a stack of aged leather-bound books with gold lettering"),
+    ("object_08", "a crystal chandelier sparkling in a grand ballroom"),
+    ("object_09", "a vintage typewriter with a half-typed letter on a desk"),
+    ("object_10", "a collection of paintbrushes in a mason jar, artist studio"),
+    ("object_11", "an antique pocket watch with its gears exposed"),
+    ("object_12", "a bouquet of fresh sunflowers in a blue ceramic pitcher"),
+    ("object_13", "a samurai sword displayed on a wooden stand, museum lighting"),
+    ("object_14", "a telescope pointed at the night sky from a balcony"),
 
-    # Abstract (4)
+    # Abstract (12)
     ("abstract_01", "geometric patterns in neon colors, digital art style"),
     ("abstract_02", "swirling galaxies and cosmic dust, space photography"),
     ("abstract_03", "liquid metal flowing into organic shapes, 3D render"),
     ("abstract_04", "fractal patterns resembling a kaleidoscope, vibrant colors"),
+    ("abstract_05", "smoke wisps forming intricate spirals against a black background"),
+    ("abstract_06", "crystalline structures growing in a purple void, sci-fi aesthetic"),
+    ("abstract_07", "rippling water surface reflecting golden sunset colors"),
+    ("abstract_08", "marble textures with veins of gold and deep blue"),
+    ("abstract_09", "fire particles dancing upward in slow motion, dark background"),
+    ("abstract_10", "iridescent soap bubble surface with rainbow interference patterns"),
+    ("abstract_11", "data streams visualized as flowing light ribbons in cyberspace"),
+    ("abstract_12", "sand patterns formed by wind on a desert dune, top-down view"),
 
-    # Text / signage (5)
+    # Text / signage (12)
     ("text_01", "a storefront window with hand-painted lettering and reflections"),
     ("text_02", "a vintage neon sign reading OPEN at night, urban street"),
     ("text_03", "a graffiti mural on a brick wall, colorful street art"),
     ("text_04", "a minimalist poster with bold typography on a gallery wall"),
     ("text_05", "a restaurant menu board with chalk lettering, warm interior"),
+    ("text_06", "a movie theater marquee with illuminated letters at night"),
+    ("text_07", "a street sign at a crossroads in a small european town"),
+    ("text_08", "a subway station wall covered in overlapping concert posters"),
+    ("text_09", "a hand-written recipe card on a kitchen counter, food stains"),
+    ("text_10", "an old library book with a stamped due date card in the pocket"),
+    ("text_11", "a warning sign on a factory gate with bold red lettering"),
+    ("text_12", "a wedding invitation card with elegant calligraphy and gold foil"),
+
+    # Architecture / interiors (12)
+    ("arch_01", "the interior of a gothic cathedral with stained glass windows"),
+    ("arch_02", "a modern glass skyscraper reflecting clouds, low angle view"),
+    ("arch_03", "a cozy attic bedroom with slanted ceilings and fairy lights"),
+    ("arch_04", "an ancient stone bridge over a calm river in autumn"),
+    ("arch_05", "a minimalist japanese tea house surrounded by a zen garden"),
+    ("arch_06", "a bustling train station concourse with arched steel beams"),
+    ("arch_07", "a mediterranean courtyard with a fountain and terracotta pots"),
+    ("arch_08", "a concrete brutalist library interior with dramatic shadows"),
+    ("arch_09", "a victorian greenhouse filled with exotic plants and ferns"),
+    ("arch_10", "a rooftop bar overlooking a city skyline at blue hour"),
+    ("arch_11", "an abandoned factory hall with broken windows and graffiti"),
+    ("arch_12", "a wooden treehouse lit by string lights at dusk"),
+
+    # Food / cuisine (12)
+    ("food_01", "a beautifully plated gourmet dish in a michelin star restaurant"),
+    ("food_02", "a rustic loaf of sourdough bread on a flour-dusted wooden board"),
+    ("food_03", "a colorful fruit tart with glazed berries, bakery display"),
+    ("food_04", "a steaming bowl of ramen with sliced pork and soft-boiled egg"),
+    ("food_05", "a street food vendor grilling skewers over charcoal at night"),
+    ("food_06", "a tiered afternoon tea stand with scones and finger sandwiches"),
+    ("food_07", "fresh sushi arranged on a black slate plate with wasabi"),
+    ("food_08", "a chocolate lava cake with molten center, vanilla ice cream side"),
+    ("food_09", "a mediterranean mezze platter with hummus, olives, and flatbread"),
+    ("food_10", "a craft cocktail with a citrus twist on a marble bar"),
+    ("food_11", "a farmers market stall with heirloom tomatoes and fresh herbs"),
+    ("food_12", "a birthday cake with lit candles, children reaching for it"),
 ]
 
 
@@ -397,8 +476,8 @@ def print_report(results, drift_orig, drift_cut):
 def main():
     parser = argparse.ArgumentParser(
         description="ICLR Task A: Cross-Prompt Statistical Validation")
-    parser.add_argument("--prompts", type=int, default=25,
-                        help="Number of prompts to use (max 25)")
+    parser.add_argument("--prompts", type=int, default=100,
+                        help="Number of prompts to use (max 100)")
     parser.add_argument("--steps", type=int, default=50)
     parser.add_argument("--skip-generation", action="store_true",
                         help="Skip image generation (use existing)")
