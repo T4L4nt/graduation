@@ -219,11 +219,18 @@ def fig2_fingerprint():
                     fontsize=10, fontweight="bold", color=c)
     plt.colorbar(im, ax=ax2, shrink=0.8)
 
-    # Caption
+    # Caption with actual closest/farthest pairs
+    # Find closest and farthest off-diagonal pairs
+    triu_idx = np.triu_indices(n, k=1)
+    closest = np.argmin(dist[triu_idx])
+    farthest = np.argmax(dist[triu_idx])
+    i_c, j_c = triu_idx[0][closest], triu_idx[1][closest]
+    i_f, j_f = triu_idx[0][farthest], triu_idx[1][farthest]
     fig.text(0.5, -0.03,
-             "Panel B: Structural distance computed from 4 raw-layer-count features "
-             "(peak position, modality, drift concentration, spread) -- NO interpolation. "
-             "SD 1.5--SDXL d=0.045 (same UNet family); SDXL--DiT d=0.620 (different backbones).",
+             f"Panel B: Structural distance from 4 raw-layer-count features "
+             f"(peak position, modality, concentration, spread) -- NO interpolation. "
+             f"Closest: {short_names[i_c]}--{short_names[j_c]} d={dist[i_c,j_c]:.3f}; "
+             f"Farthest: {short_names[i_f]}--{short_names[j_f]} d={dist[i_f,j_f]:.3f}.",
              ha="center", fontsize=8, color="gray", style="italic")
 
     fig.suptitle("Figure 2: Architecture Fingerprint -- Phi(M) is reproducible, architecture-specific",

@@ -215,43 +215,70 @@ Multi-seed measurement (3 seeds × 5 images): σ/mean = 0.1% per layer.
 Φ(M_A) and Φ(M_B) are measurably different for M_A ≠ M_B with different
 backbone topologies.
 
-*Evidence:* 4 architectures in unified comparison (SD 1.5, SDXL, HunyuanDiT,
-FLUX.1-dev), 6 pairwise comparisons. We report Spearman ρ (rank correlation)
-as the primary metric because it is robust to the extreme range differences
-between architectures (raw drift magnitudes span ~10^4× before normalization).
+*Evidence:* 5 architectures (SD 1.5, SDXL, HunyuanDiT, FLUX.1-dev, SD 3.5
+as held-out), 10 pairwise comparisons. We use **structural distance**
+(Euclidean distance in a 4-dimensional feature space: peak position,
+number of peaks, drift concentration, and spread) computed directly from
+raw layer counts — no interpolation to a common length.
 
-Same-backbone pairs (Spearman ρ):
-- SD 1.5 vs SDXL (both UNet): **ρ = 0.796** — highest overall
-- DiT vs FLUX (both Transformer): **ρ = 0.722**
+**Methodology note:** Earlier versions of this work used Spearman ρ and
+Pearson r on interpolated drift vectors. We have retired this approach
+for two reasons: (1) the `full_ranking` key in our data files is sorted
+by drift magnitude (not architectural depth), which makes all profiles
+monotonically decreasing and inflates correlations; (2) interpolation to
+a common 57-point grid creates up to 51% synthetic data points for
+architectures with fewer layers (e.g., SDXL 28→57). The structural
+distance metric avoids both issues entirely.
 
-Cross-backbone pairs (Spearman ρ):
-- SD 1.5 vs DiT: ρ = 0.382 — lowest overall
-- SD 1.5 vs FLUX: ρ = 0.407
-- SDXL vs FLUX: ρ = 0.538
-- SDXL vs DiT: ρ = 0.641
+Structural distance matrix (lower = more similar):
 
-Pearson r is reported for completeness (range [0.486, 0.792]), but can be
-inflated by min-max normalization compression: architectures with a single
-dominant peak (SDXL, DiT) produce deceptively high Pearson r after compression
-to [0,1] even when their rank structures differ (SDXL vs DiT: r=0.792 but
-ρ=0.641). See Figure 2 for the 4-curve overlay and Figure 3C for the full
-similarity matrix with all three metrics (Spearman ρ, Pearson r, Cosine).
+| Pairing | d | Interpretation |
+|---------|---|---------------|
+| **SD 1.5 vs SDXL** | **0.249** | Same UNet family — closest |
+| **FLUX vs SD 3.5** | **0.385** | Same MM-DiT backbone — second closest |
+| SDXL vs HunyuanDiT | 0.506 | Different backbone, moderate |
+| SD 1.5 vs HunyuanDiT | 0.624 | Different backbone |
+| SDXL vs FLUX | 0.628 | Different backbone + paradigm |
+| SD 1.5 vs FLUX | 0.637 | Different backbone + paradigm |
+| SD 1.5 vs SD 3.5 | 0.722 | Different backbone |
+| SDXL vs SD 3.5 | 0.803 | Different backbone |
+| **HunyuanDiT vs FLUX** | **1.077** | Both Transformer, but single vs dual-stream — **farthest** |
+| HunyuanDiT vs SD 3.5 | 1.165 | Different backbone, farthest overall |
 
-### Property 3 (Backbone Dominance over Sampling Paradigm)
+Same-family pairs (both UNet: d=0.249; both MM-DiT: d=0.385) are
+systematically closer than cross-family pairs (all d > 0.5). See
+Figure 2 for the 5-curve overlay and structural distance matrix.
 
-The Spearman ρ matrix reveals a clear hierarchy: same-backbone pairs are
-systematically more similar than cross-backbone pairs, even when the
-same-backbone pair crosses the DDIM/Flow-Matching paradigm boundary.
-This suggests that backbone topology contributes more to Φ than sampling
-paradigm—though a direct within-architecture paradigm comparison is not
-possible (FLUX does not support DDIM inversion).
+### Property 3 (Attention Topology over Broad Backbone Family)
 
-*Evidence:* Spearman ρ matrix. DiT vs FLUX: ρ=0.722 (same Transformer
-backbone, DDIM v-pred vs Flow Match). SD 1.5 vs FLUX: ρ=0.407 (different
-backbone, different paradigm). The Transformer pair's similarity exceeds
-the cross-backbone pair despite the paradigm difference. Same-backbone
-UNet pair (SD 1.5 vs SDXL: ρ=0.796) is the highest of all. See Figure 3C
-and Appendix for the full similarity matrix.
+The structural distance matrix reveals that attention topology
+(single-stream vs dual-stream) is a stronger determinant of Φ than the
+broad backbone family (Transformer vs UNet). The HunyuanDiT vs FLUX pair
+— both Transformer-based — is the **farthest** among all 4-architecture
+pairs (d=1.077), exceeding even cross-family distances like SD 1.5 vs
+HunyuanDiT (d=0.624). In contrast, same-family UNet pairs (d=0.249) and
+same-family MM-DiT pairs (d=0.385) are consistently close.
+
+This refines the earlier "Backbone Dominance" framing: backbone *family*
+does not dominate — *specific attention topology* (single-stream joint
+attention vs dual-stream split attention, presence and direction of
+cross-modal interaction boundaries) is the primary determinant of Φ.
+This is consistent with the qualitative architecture-topology-to-fingerprint
+mapping (Section 3.4), which identifies (a) information flow graph,
+(b) skip/residual structure, and (c) cross-modal interaction boundaries
+as the three predictive features, none of which reduce to a simple
+"CNN vs Transformer" dichotomy.
+
+*Evidence:* Structural distance matrix (5 architectures, 10 pairs).
+HunyuanDiT (single-stream Transformer, DDIM v-pred) and FLUX (dual-stream
+MM-DiT, Flow Match) share a Transformer backbone but differ in attention
+topology — and are structurally farthest. SD 1.5 (UNet, DDIM) and SDXL
+(UNet, DDIM) share both backbone and paradigm — and are closest. SD 3.5
+(held-out) and FLUX share MM-DiT backbone — second closest, confirming
+the framework's predictive value. The sampling paradigm (DDIM vs Flow
+Matching) is not the determining factor — FLUX vs SD 1.5 (d=0.637) and
+HunyuanDiT vs SD 1.5 (d=0.624) are at similar distances despite HunyuanDiT
+using DDIM and FLUX using Flow Match.
 
 ### Property 4 (Temporal Consistency)
 
@@ -632,7 +659,7 @@ Fingerprint measurement.
 横向三阶段布局（深色背景）：
 
 - **左 — Observation**: Source Image → Inversion → Reconstruction → f_inv ≠ f_recon → "Random noise? ✗ Architecture signal? ✓"
-- **中 — Discovery**: 5 架构漂移曲线叠加，不同颜色，峰位置不同。r(FLUX,DiT)=0.727, r(FLUX,SD1.5)=0.486, Backbone > Paradigm
+- **中 — Discovery**: 5 架构漂移曲线叠加，不同颜色，峰位置不同。同 family 最近（SD1.5-SDXL d=0.249），attention 拓扑差异最大（DiT-FLUX d=1.077）。Attention topology > Backbone family
 - **右 — Diagnosis → Correction**: Φ(M) → Peak Location → z ← z + λ(z_inv − z) → Edited result. LPIPS −40%, MB vs GB. "Diagnosis makes simple correction sufficient"
 
 Caption: "Feature drift is not random error but an architecture-dependent diagnostic signal."
