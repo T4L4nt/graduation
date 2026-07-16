@@ -9,6 +9,15 @@
 > v3 → v3.1 (SDXL 实验后)：(7)Mechanism 从"Skip Conflict 统一解释 U-Net"
 > 修正为"Architecture-specific Mechanistic Analysis"——Fingerprint 是诊断工具，
 > 不同架构得到不同机理解释；(8)Claim 收敛，不过度外推。
+>
+> v3.1 → v3.2 (2026-07-16 方法论修正)：(9)跨架构相似度量从插值 Pearson/Spearman
+> 切换为结构距离（无插值，4 特征），修复 `full_ranking` 排序 bug（按漂移量级而非
+> 架构深度）和插值 artifact（SDXL 28→57 含 51% 合成点）；(10)Property 3 翻转：
+> "Backbone Dominance" → "Attention Topology over Broad Backbone Family"——
+> HunyuanDiT(Transformer single-stream) vs FLUX(MM-DiT dual-stream) 是结构距离
+> 最远的配对(d=1.077)，推翻此前"同 Transformer backbone 最相似"的结论；
+> (11)架构计数 4→5 (新增 SD 3.5 held-out)，配对 6→10；(12)Property 5 样本量
+> 25→100 prompts；(13)Scope Declaration 数字同步更新。
 
 ---
 
@@ -174,7 +183,7 @@ The paper is organized as a five-layer conceptual hierarchy:
 §3  Architecture Fingerprint     — WHAT:   Measurement framework
        ↑
 §3  Properties (1–5)             — HOW STABLE: Reproducibility, differentiation,
-                                    backbone dominance, temporal consistency,
+                                    attention topology, temporal consistency,
                                     prompt robustness
        ↑
 §4  Mapping Principles (1–3)     — HOW TO INTERPRET: From architecture topology
@@ -304,13 +313,15 @@ See Appendix Figure A2.
 
 ### Scope Declaration (Properties 1–5)
 
-Properties 1–3 are established on 4 architectures in unified comparison
-(SD 1.5, SDXL, HunyuanDiT, FLUX.1-dev) with SD 3.5 Medium as a 5th
-held-out validation (see Principle 1). All measurements use coco_val
-images under DDIM or Euler sampling. Property 5 extends the evaluation
-to 25 diverse prompts; editing validation covers 25 additional edit pairs
-across 3 conditions (see §6). Extension to further architectures, datasets,
-and protocols is discussed in §7.
+Properties 1–3 are established on 5 architectures in unified comparison
+(SD 1.5, SDXL, HunyuanDiT, FLUX.1-dev, SD 3.5 Medium as held-out),
+10 pairwise comparisons. All measurements use coco_val images under DDIM
+or Euler sampling. The structural distance metric (4 features from raw
+layer counts) avoids interpolation artifacts present in earlier
+Pearson/Spearman approaches. Property 5 extends the evaluation to 100
+diverse prompts; editing validation covers 121 edit pairs
+(see §6). Extension to further architectures, datasets, and protocols
+is discussed in §7.
 
 ---
 

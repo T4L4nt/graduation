@@ -114,7 +114,10 @@ FLUX feature-level correction 对 λ **高度敏感**——最优在极小值（
 |--------|------|
 | Property 1 (Reproducibility) | 补 LOOCV 实验，r=1.000, σ/mean=0.1% → `outputs/phase1_reproducibility/` |
 | Property 3 降级 | "Paradigm Stability" → "Backbone Dominance"，诚实承认范式对比是间接的 |
+| **Property 3 翻转** | **"Backbone Dominance" → "Attention Topology over Broad Backbone Family"——HunyuanDiT vs FLUX 是结构距离最远配对(d=1.077)，推翻此前 Spearman ρ=0.722 的"同 backbone 最相似"结论。根因：`full_ranking` 排序 bug + 插值 artifact（SDXL 28→57 含 51% 合成点）** |
 | 架构计数修正 | "5 archives, 10 pairwise" → "4 unified + 1 held-out (SD 3.5), 6 pairwise" |
+| **架构计数二次修正** | **"4+1, 6 pairwise" → "5 unified, 10 pairwise"——SD 3.5 纳入完整结构距离矩阵，非单独 held-out** |
+| **相似度方法论修正** | **废弃插值 Pearson/Spearman → 结构距离（4 特征，无插值）。修复 `full_ranking` 排序 bug（按漂移量级非架构深度）+ 插值 artifact（51% 合成点）** |
 | Phase 8b λ 标注 | 消融表头 λ=0.7 → λ=0.1（实际最优值） |
 | Euler 表 DiT N | N=19, ~16 dB, +5.65 → N=3*, 15.24 dB, +4.67 |
 | Pearson r | =1.000 → ≈1.000（4 处修正） |
