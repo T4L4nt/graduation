@@ -324,6 +324,13 @@ diverse prompts; editing validation covers 121 edit pairs
 (see §6). Extension to further architectures, datasets, and protocols
 is discussed in §7.
 
+**Data reuse note:** The top-5 drift layers used for correction (§6) were
+identified from the same 19 coco_val images used for evaluation, creating a
+potential positive bias in the 19-image ΔPSNR estimate. The 100-image
+independent evaluation (+3.30 dB, d=1.34) exceeds the 19-image result
+(+2.75 dB, d=0.79), suggesting the bias is small and conservative. We report
+both results and recommend the 100-image estimate as the primary evidence.
+
 ---
 
 ## 3. Layer 3 — 映射原则 (Mapping Principles, 假设，已验证)
@@ -446,8 +453,9 @@ different outcomes.
 Zeroing the peak skip (α=0) breaks the Conflict source at that location,
 causing the entire chain to shift.
 
-*Evidence:* 31/38 layers p<0.05 (paired t-test). Peak drift: −27.7%
-(p=4.8×10⁻⁸). Reconstruction: PSNR +2.20 dB (p=0.0005). See Figure 6A.
+*Evidence:* 31/38 layers p<0.05 (paired t-test; 20/38 survive Bonferroni correction,
+α=0.001316). Peak drift: −27.7% (p=4.8×10⁻⁸). Reconstruction: PSNR +2.20 dB
+(p=0.0005). See Figure 6A.
 
 **Claim 4b (Location specificity rules out capacity effect).**
 Zeroing a low-drift skip produces no significant change, confirming
