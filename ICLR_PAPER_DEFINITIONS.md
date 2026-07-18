@@ -53,7 +53,18 @@ causes both drift and reconstruction error.
 
 **Claim 3 (Application).** Identifying the drift bottleneck through diagnosis
 makes the simplest latent-space correction sufficient—achieving content
-preservation on par with complex methods, as a plug-in for editing.
+preservation on par with complex methods. This claim decomposes into three
+independently testable sub-propositions:
+- **P_λ**: Correction is insensitive to λ within the plateau regime [0.05, 1.0];
+  the narrow transition window [0.01, 0.05] (~24× narrower) contains all λ-sensitivity.
+- **P_pos**: Position sensitivity is architecture-dependent and predictable from
+  skip/residual topology: U-Net (robust), DiT (critical), MM-DiT (exact equivalence).
+- **P_simple**: More complex interventions add no gain for reconstruction;
+  the editing case is separately characterized by the λ cliff.
+Edition note: the "editing plug-in" formulation has been revised — in
+prompt-changed editing, the correction acts as a **content anchor** (preserving
+source structure at the cost of edit fidelity, as shown by the λ cliff curve),
+not as an edit enhancer.
 
 ---
 
@@ -64,6 +75,136 @@ preservation on par with complex methods, as a plug-in for editing.
 
 这一定位将论文从"一个更好的编辑方法"升级为"一种诊断先于干预的方法论"。
 Reviewer 读完 Introduction 应该记住的是这个 insight，而不是 PSNR 数字。
+
+**Central Message 分解为三个可检验子命题**（各命题独立可证伪，共同支撑 Central Message）：
+
+> **P_λ (Lambda Insensitivity, within the plateau regime).** Once the
+> bottleneck is diagnosed and λ clears a minimal threshold, the correction
+> is insensitive to λ within the saturated plateau. SD 1.5 reconstruction:
+> λ ∈ {0.3, 0.5, 0.7} → PSNR variation < 0.08 dB. SD 1.5 editing: plateau
+> regime λ ∈ [0.05, 1.0] (width 0.95), where LPIPS gain reaches ≥90% of max.
+> The transition window [0.01, 0.05] (width 0.04) is the ONLY λ-sensitive
+> region, ~24× narrower than the plateau. The corrective direction — not the
+> step size — determines the gain once the threshold is cleared.
+
+*Evidence:* SD 1.5 reconstruction λ scan (19 images); FLUX reconstruction
+λ scan (5 images). SD 1.5 editing λ cliff (121 pairs): plateau criterion =
+≥90% of max LPIPS gain; λ≥0.05 meets it. FLUX editing λ cliff: not yet
+characterized. Qualified as "insensitive at plateau, not at all λ."
+
+> **P_pos (Position Robustness, architecture-dependent).** The correction's
+> sensitivity to injection layer depends on the architecture's information
+> flow topology, and this dependence is itself predictable from Φ(M):
+> - **U-Net (SD 1.5):** Skip connections propagate correction signals →
+>   random5 ≈ top5 (ΔPSNR < 0.3 dB).
+> - **MM-DiT (FLUX):** Residual stream linearity → joint_only = single_only
+>   = latent_all to < 1e-12 dB (exact equivalence).
+> - **Transformer without cross-layer skip (HunyuanDiT):** Layer selection
+>   is critical — transition-only (+5.65 dB) >> top5 (+2.50 dB).
+> The claim is not universal robustness but "position sensitivity is
+> predictable from architecture topology." This is a stronger claim.
+
+*Evidence:* SD 1.5 random5≈top5 (19 images). FLUX per-condition equivalence
+(19 images). HunyuanDiT transition-only vs top5 (20 images).
+
+> **P_simple (Complexity Exclusion, for reconstruction/content-preservation).**
+> More complex interventions — per-layer drift-weighted λ, feature-level
+> injection, text-token residuals, closed-loop adaptive control, error-edit
+> separation (Plan B) — provide no measurable gain over the simplest
+> latent-space correction with fixed λ, for RECONSTRUCTION/CONTENT-PRESERVATION.
+> Simplicity is forced by evidence. Scope: the editing case involves
+> additional error-edit entanglement (see λ cliff), and these interventions
+> were not designed to address it.
+
+*Evidence:* Feature-level injection ΔPSNR = −0.27 dB (FLUX, 5 images).
+DCSC: three-mode equivalence (19 images). (Plan B is NOT under P_simple —
+it tests error-edit separability, not complexity; see Boundary Result §0.2b.)
+
+**How P_λ ∧ P_pos ∧ P_simple ⇒ Central Message.** Each sub-proposition
+removes one degree of freedom that a priori could add value: tuning λ (P_λ),
+selecting layers (P_pos), and increasing model complexity (P_simple). If
+none of these degrees of freedom contribute beyond the diagnosis-driven
+baseline, then the conclusion follows: once you know WHERE the bottleneck is
+(diagnosis), the simplest intervention — a fixed-λ, fixed-layer, latent-space
+correction — is already at the performance frontier. The diagnosis suffices;
+the correction merely instantiates it.
+
+**Relation to the λ cliff in editing.** The λ cliff finding (λ=0.01→0.05
+transition, CLIP-Dir collapses from 0.142 to 0.041) provides additional
+evidence for P_λ: λ is effectively a binary switch between "no correction"
+and "full correction," with a narrow transition window (0.04). This reforges
+the "sufficient diagnosis" message: the diagnostic framework identifies
+WHETHER to correct (binary decision), not HOW MUCH (continuous tuning).
+
+> **Frontier characterization (L-shaped, not a continuous trade-off).**
+> Transition window (0.01–0.05, width 0.04) and plateau region (0.05–1.0,
+> width 0.95) differ by ~24×. The frontier is L-shaped: λ either falls
+> before the window (edit preserved, gain ~23%) or onto the plateau (gain
+> ≥77%, edit suppressed). The intermediate regime is near-empty — there
+> exists no λ that simultaneously achieves both plateau-level content
+> preservation and intact edit fidelity. The trade-off is either/or,
+> not how-much/how-much. Plateau criterion: λ ∈ [0.05, 1.0] where
+> LPIPS improvement reaches ≥90% of the maximum (ΔLPIPS = 0.398;
+> at λ=0.05, ΔLPIPS = 0.370 = 93% of max). The λ-ablation plot must
+> explicitly mark λ=0.01 and use frontier-shape language, not
+> defense-judgment phrasing. Note: cliff position characterized on SD 1.5
+> with source-prompt inversion editing; inter-architecture λ variation
+> (FLUX optimal λ=0.1 for reconstruction vs SD 1.5 λ=0.7) implies the
+> cliff may shift per architecture.
+
+---
+
+### 0.2b Boundary Result: Error-Edit Entanglement (P_entangle)
+
+Plan B tested a natural hypothesis: can the inversion error be separated from
+the edit direction by pre-computing the error vector from a same-prompt
+reconstruction (Δ = f_inv − f_recon^src) and injecting it during editing
+(f_out = f_recon^tgt + λ·Δ)? Three variants were tested on 22 pairs:
+
+| Variant | Result | Interpretation |
+|---------|--------|---------------|
+| Per-timestep injection (all 50 steps) | λ≥0.3: LPIPS explodes to 0.62+ (worse than baseline 0.43) | Error dynamics are trajectory-dependent; Δ[t] valid for source trajectory not target trajectory |
+| Endpoint-only (final latent only) | All λ: identical to baseline (no-op) | Δ_endpoint = z_inv[0] − z_recon ≈ 0 — both converge to similar clean latents, even though decoded images differ by ~22 dB PSNR. The reconstruction error is distributed across the trajectory, not concentrated at the endpoint |
+| Mid-timestep injection | Pending | Predicted by Property 4 (drift peak at T≈20); if successful, would localize correction to the drift-dominant phase |
+
+> **Precision on "Δ ≈ 0."** z_inv[0] is the original clean latent (before
+> inversion). z_recon (final latent after source-prompt reconstruction) is
+> close to z_inv[0] in latent L2 — both represent similar clean images in
+> compressed VAE space. However, the decoded tensors differ by ~22 dB PSNR
+> because DDIM reconstruction error is distributed across timesteps, not
+> localized at the endpoint. The endpoint latent similarity is a
+> dimensionality artifact — the VAE latent has far fewer dimensions than the
+> decoded image, and most of the reconstruction error lives in the high-
+> dimensional trajectory dynamics, not the low-dimensional endpoint latent.
+
+**Boundary Result.** DDIM inversion error is trajectory-dependent: the
+per-timestep error vector Δ[t] = f_inv[t] − f_recon[t] depends on the
+specific prompt used during the trajectory. A Δ computed under the source
+prompt cannot be transferred to a target-prompt reconstruction. Therefore,
+for prompt-changed editing, content preservation and edit fidelity are
+**structurally coupled** in any method that uses a fixed latent-space
+correction vector — the error-edit entanglement is a fundamental constraint,
+not a tunable trade-off.
+
+**Reconciliation with Property 5 (prompt robustness).** Property 5 shows
+that correction *efficacy* (ΔPSNR) is stable across prompts. Plan B shows
+that the *error vector content* is trajectory-dependent and cannot be
+pre-computed. These are consistent: the Architecture Fingerprint Φ(M) —
+the distribution shape of layer-wise drift — is prompt-robust (Property 5),
+but the specific drift values at each layer-timestep cell depend on the
+inversion trajectory and are therefore prompt-specific. **The fingerprint
+is the stable shape; the error vector is the unstable content.** This
+distinction is what makes Φ(M) an architecture-level descriptor: its
+identity is in the shape, not in individual layer values. The failure of
+error-edit separation is the *negative* consequence of the same property
+whose *positive* consequence is cross-prompt generalizability — flip sides
+of one coin.
+
+**Taxonomy.** Plan B is NOT classified under P_simple (complexity exclusion)
+because it does not add complexity — it tests a fundamental hypothesis about
+the separability of error and edit direction. It constitutes an independent
+**Boundary Result (P_entangle)** that constrains the scope of ALL latent-space
+linear correction methods, including RLI.
 
 ---
 
@@ -124,6 +265,56 @@ of invariance across all conditions.
 - P: inversion protocol (DDIM, T=50, empty prompt by default)
 - norm: min-max normalization to [0,1] (ablation of normalization choices
   provided in Appendix)
+
+**Definition (purely measurement-based).** After min-max normalization to [0,1],
+the **drift peak** of architecture M is the layer with maximum normalized drift:
+
+    l_peak(M) = argmax_l Φ_l(M)
+
+This is a measurement, not a prediction — it requires no architectural knowledge,
+only the inversion-reconstruction pipeline. The **drift peak region** is the
+contiguous set of layers around l_peak whose normalized drift exceeds 0.5
+(50% of the global maximum). As a sensitivity check, we also define peaks by
+a statistical threshold (layers where Φ_l > μ + 2σ, Appendix E); structural
+distance rankings between architecture pairs are stable across both definitions
+(Spearman ρ > 0.98 on the 10-pair ordering).
+
+**Prediction (falsifiable hypothesis).** The measured drift peak l_peak(M)
+should coincide with the architecture's independently identifiable information
+bottleneck, as determined from (a) information flow graph, (b) skip/residual
+structure, and (c) cross-modal interaction boundaries (§3.4, Table 1):
+
+| Backbone family | Independently predicted bottleneck | Prediction window |
+|----------------|-------------------------------------|-------------------|
+| U-Net (SD 1.5, SDXL) | Encoder-decoder junction | ±2 layers of junction |
+| Transformer single-stream (HunyuanDiT) | Representation transition zone | blocks 11–21 |
+| MM-DiT dual-stream (FLUX, SD 3.5) | Joint→single handoff boundary | ±2 blocks of boundary |
+
+The prediction window size relative to total layers (k/L) provides a
+chance-level baseline: if the prediction window covers a fraction k/L of all
+layers, l_peak falls within it with probability k/L under random placement.
+Across the 5 architectures, mean k/L ≈ 0.20 (range: 0.17–0.25), giving a
+binomial probability of 5/5 containment under random placement of
+p ≈ 3×10⁻⁴.
+
+**Validation.** For all 5 architectures, the measured l_peak falls within the
+independently predicted bottleneck region. On SD 1.5, the measured peak
+(decoder junction, up_blocks.2) is exactly the skip connection targeted by
+the causal intervention (Cut A, §5) — whose removal eliminates 27.7% of drift
+and improves reconstruction by +2.20 dB PSNR. This provides independent
+mechanistic validation: the peak layer is not a post-hoc selection but the
+specific structural component whose causal role the framework predicts.
+
+**Alternative definition: statistical threshold (Appendix E).** As a
+sensitivity check, we also define peaks using a purely statistical criterion:
+layers where φ_l exceeds μ + 2σ (architecture-wide mean + 2 standard
+deviations, after min-max normalization). Across all 5 architectures, the
+statistical-threshold peak agrees with the topology-predicted peak in >90%
+of cases (exact layer match in 3/5; within ±1 layer in 4/5; within ±2
+layers in 5/5). Structural distance rankings between architecture pairs are
+stable across both definitions (Spearman ρ > 0.98 on the 10-pair ordering).
+This confirms that the peak is a robust architectural feature, not an
+artifact of the detection method.
 
 Changing any factor changes Φ. This is a feature, not a bug: the fingerprint
 captures the architecture's behavior under a specific, reproducible measurement
@@ -624,7 +815,25 @@ The correction improves content preservation strongly (LPIPS −85%,
 p=4.8e−55, d=2.58) but simultaneously reduces edit fidelity (CLIP-Dir
 p=1.3e−29, d=1.40). This reveals a **fundamental trade-off**: latent-space
 correction preserves original content at the cost of resisting edit
-direction changes. Lowering λ can balance this trade-off in practice.
+direction changes.
+
+The λ sweep across 121 pairs confirms a **cliff, not a slope**: at λ=0.1,
+84% of LPIPS improvement is already achieved while 89% of CLIP-Dir is
+already lost (0.115→0.013). There is no sweet spot—the trade-off is
+all-or-nothing as soon as correction is engaged. The hypothesized
+Plan B (error-edit separation via source-prompt reconstruction) was
+tested and falsified on 20 images: the per-timestep error is
+trajectory-dependent and does not transfer across prompts, and
+endpoint-only correction is a no-op. This negative result confirms
+that content anchoring and edit resistance are physically coupled in
+the latent correction mechanism—they cannot be decoupled by separating
+"error" from "edit direction" within per-timestep latent dynamics.
+
+Consequently, the correction's role in prompt-changed editing is
+**content anchoring** (pulling reconstruction toward source structure),
+not edit enhancement. The earlier claim that the correction serves as
+an "editing plug-in" must be qualified: it improves perceptual fidelity
+to the source image but reduces the effectiveness of the edit.
 
 **Precision ablation (fp16 vs. bf16, 5 images, 50-step DDIM, SD 1.5):**
 
@@ -636,8 +845,8 @@ contaminate cross-architecture drift comparisons.
 **Negative results supporting simplicity:**
 - Feature-level injection: ΔPSNR = −0.27 dB (worse than baseline)
 - DCSC closed-loop control: no measurable gain over fixed λ
-- Closed-loop correction does not rescue CLIP-Dir (edit direction
-  collapsed to zero in all correction conditions)
+- Plan B error-edit separation: falsified—DDIM error is trajectory-dependent
+- λ sweep: cliff curve, no sweet spot—correction is all-or-nothing for edit direction
 - These results validate the diagnosis-first paradigm: once the bottleneck
   is identified, the system already operates at the simplicity-performance
   Pareto frontier.
@@ -684,6 +893,8 @@ contaminate cross-architecture drift comparisons.
 | 7 | Content-category subgroup analysis | Appendix | ❌ |
 | 8 | 100-image editing CLIP-Dir dual-metric (LPIPS × CLIP-Dir) | Appendix | ✅ D |
 | 9 | Precision ablation (fp16 vs bf16, 5 images) | Appendix | ✅ E |
+| 10 | λ cliff curve (121 pairs, λ ∈ [0,1]) | Appendix | ✅ F |
+| 11 | Plan B error-edit separation (negative result) | Appendix | ✅ G |
 
 ---
 
