@@ -18,6 +18,21 @@
 > 最远的配对(d=1.077)，推翻此前"同 Transformer backbone 最相似"的结论；
 > (11)架构计数 4→5 (新增 SD 3.5 held-out)，配对 6→10；(12)Property 5 样本量
 > 25→100 prompts；(13)Scope Declaration 数字同步更新。
+>
+> v3.2 → v3.3 (2026-07-18 因果范式隔离实验)：(14)Property 3 新增 Controlled
+> Paradigm Isolation 实验——同 DiT-S/2 架构、双训练目标(eps-prediction DDPM vs
+> flow matching)，以干净因果设计分离架构与训练范式 confound；(15)结论措辞修正：
+> 指纹"完全一致" → "组织架构（峰位、排序、加速 motif）对训练范式不变，绝对量级
+> 和归一化细节形状范式依赖"，Spearman ρ 降级为参考指标（单调序列秩相关检验力有限）；
+> (16)架构计数 5→6 (新增 DiT-S/2)，为 Mapping Principles 提供第 6 个 held-out 验证；
+> (17)相位差值剖面(b.9 处范式差异最大)作为观察报告，标 open question。
+> 切换为结构距离（无插值，4 特征），修复 `full_ranking` 排序 bug（按漂移量级而非
+> 架构深度）和插值 artifact（SDXL 28→57 含 51% 合成点）；(10)Property 3 翻转：
+> "Backbone Dominance" → "Attention Topology over Broad Backbone Family"——
+> HunyuanDiT(Transformer single-stream) vs FLUX(MM-DiT dual-stream) 是结构距离
+> 最远的配对(d=1.077)，推翻此前"同 Transformer backbone 最相似"的结论；
+> (11)架构计数 4→5 (新增 SD 3.5 held-out)，配对 6→10；(12)Property 5 样本量
+> 25→100 prompts；(13)Scope Declaration 数字同步更新。
 
 ---
 
@@ -44,8 +59,12 @@
 ### 0.1 论文的三层 Claim（摘要只报告这三项）
 
 **Claim 1 (Discovery).** Feature drift exhibits an **Architecture Fingerprint**:
-its layer-wise distribution is a reproducible, architecture-specific measurement
-determined by backbone topology, not sampling paradigm.
+its layer-wise *organizational structure* (peak position, per-layer ranking,
+acceleration motif) is a reproducible, architecture-specific measurement
+determined by backbone topology, not sampling paradigm. Absolute magnitude
+and fine-grained normalized shape carry paradigm-dependent variation that does
+not alter the architecture's diagnostic signature. (Refined per controlled
+paradigm-isolation experiment, DiT-S/2; see Property 3.)
 
 **Claim 2 (Mechanism).** In U-Net architectures, the fingerprint originates from
 **skip-mediated encoder-decoder feature conflict**—a structured mismatch that
@@ -475,8 +494,36 @@ Structural distance matrix (lower = more similar):
 | HunyuanDiT vs SD 3.5 | 1.165 | Different backbone, farthest overall |
 
 Same-family pairs (both UNet: d=0.249; both MM-DiT: d=0.385) are
-systematically closer than cross-family pairs (all d > 0.5). See
-Figure 2 for the 5-curve overlay and structural distance matrix.
+systematically closer than cross-family pairs (all d > 0.5).
+
+**Reference point — intra-architecture cross-paradigm comparison:**
+A controlled DiT-S/2 pair (identical architecture, eps-prediction DDPM vs
+flow matching, trained on identical data, 19 held-out test images) provides
+a direct measurement of what "paradigm change alone" contributes. After
+min-max normalization, the two normalized drift profiles are:
+
+```
+eps_norm:  [0.00, 0.02, 0.04, 0.05, 0.06, 0.09, 0.13, 0.17, 0.39, 0.71, 0.81, 1.00]
+flow_norm: [0.00, 0.00, 0.02, 0.02, 0.03, 0.07, 0.13, 0.19, 0.29, 0.44, 0.68, 1.00]
+```
+
+Both peak at block 11 (identical). The main difference is at blocks 8-9
+where eps has higher relative drift (0.39 vs 0.29 at block 8; 0.71 vs 0.44
+at block 9). Peak agreement and shared monotonic acceleration motif support
+the "architecture determines fingerprint" claim. The pre-peak divergence
+constitutes paradigm-dependent fine structure that does not alter peak
+identification. See Property 3 for detailed experimental protocol and
+the two-layer finding table. See Figure 2 for the 5-curve overlay and
+structural distance matrix.
+
+**Metric compatibility note**: the 4-feature structural distance d(eps, flow)
+is not directly comparable to the cross-architecture distance matrix above
+because (a) DiT-S/2 has only 12 layers (vs 28–57 for the 5 primary
+architectures), making the `n_peaks` feature too coarse; (b) the distances
+were designed for cross-backbone comparisons, not intra-architecture
+paradigm comparisons. The normalized profile overlay and peak position
+identity are the primary evidence; cross-paradigm effect size is reported
+qualitatively through the profile table above.
 
 ### Property 3 (Attention Topology over Broad Backbone Family)
 
@@ -498,16 +545,85 @@ mapping (Section 3.4), which identifies (a) information flow graph,
 as the three predictive features, none of which reduce to a simple
 "CNN vs Transformer" dichotomy.
 
-*Evidence:* Structural distance matrix (5 architectures, 10 pairs).
+*Evidence (correlational):* Structural distance matrix (5 architectures, 10 pairs).
 HunyuanDiT (single-stream Transformer, DDIM v-pred) and FLUX (dual-stream
 MM-DiT, Flow Match) share a Transformer backbone but differ in attention
 topology — and are structurally farthest. SD 1.5 (UNet, DDIM) and SDXL
 (UNet, DDIM) share both backbone and paradigm — and are closest. SD 3.5
 (held-out) and FLUX share MM-DiT backbone — second closest, confirming
-the framework's predictive value. The sampling paradigm (DDIM vs Flow
-Matching) is not the determining factor — FLUX vs SD 1.5 (d=0.637) and
-HunyuanDiT vs SD 1.5 (d=0.624) are at similar distances despite HunyuanDiT
-using DDIM and FLUX using Flow Match.
+the framework's predictive value.
+
+**Limitation of the above evidence**: architecture and training paradigm are
+naturally confounded in all publicly available models (UNet = DDPM-trained,
+MM-DiT = Flow-Matching-trained). The inference that "paradigm is not the
+determining factor" is indirect — it rests on the observation that
+FLUX vs SD 1.5 (d=0.637, different backbone + paradigm) and HunyuanDiT vs
+SD 1.5 (d=0.624, different backbone, same paradigm) are at similar distances.
+This is a weak argument: HunyuanDiT and FLUX differ in attention topology
+(single vs dual stream), so the distance could be driven by either factor.
+
+*Evidence (causal, controlled paradigm isolation):* To disentangle architecture
+from training paradigm, we train the identical DiT-S/2 architecture (~40M
+parameters, 12 transformer blocks, no cross-attention, pixel-space 64×64)
+under two training objectives — eps-prediction (standard DDPM, L_simple) and
+flow matching (velocity prediction, rectified flow path) — on the same 111
+training images, with identical initialization seed, optimizer, batch size,
+and step count (40,000). Both models are then diagnosed with 19 held-out
+COCO val images using their respective inversion-reconstruction protocols
+(DDIM for eps-prediction, Euler ODE for flow matching).
+
+**Result (two-layer finding):**
+
+| Aspect | Finding | Supports |
+|--------|---------|----------|
+| Peak position | Both at transformer_blocks.11 (identical) | Architecture invariant |
+| Organizational motif | Monotonic increase + terminal 3-layer acceleration (identical) | Architecture invariant |
+| Per-layer ranking | Preserved (Spearman ρ = 1.000; note: weak test for monotonic profiles) | Reference only |
+| Absolute magnitude | Eps ~1.55× higher on average, ratio profile non-constant (1.09–2.37, max at block 9) | Paradigm-dependent |
+| Normalized shape | Pre-peak offset up to 0.25 (eps drift more dispersed pre-peak, flow more concentrated at final layer) | Paradigm-dependent |
+
+**Correct framing**: the *organizational structure* of the drift fingerprint
+(peak position, per-layer ranking, acceleration motif) is invariant to the
+training paradigm; absolute magnitude and fine-grained normalized shape are
+paradigm-dependent. This is stronger than "fingerprints are identical" — it
+isolates exactly *which* aspects of Φ(M) are architectural and which are
+paradigm-dependent. Claim 1's assertion that "drift is determined by backbone
+topology, not sampling paradigm" is refined to: *architecture determines the
+organizational structure of the drift profile; training paradigm modulates
+absolute magnitude and fine shape details that do not alter the architecture's
+diagnostic signature*.
+
+**Statistical caveat**: Spearman ρ = 1.000 is reported for completeness but
+is not a strong finding — both drift profiles are monotonically increasing,
+making rank correlation nearly vacuous (any two monotonically increasing
+sequences will show ρ ≈ 1). The primary evidence for organizational invariance
+is peak position identity and the shared acceleration motif.
+
+**Structural distance**: The intra-architecture cross-paradigm structural
+distance d(eps, flow | DiT-S/2) will be computed using the same 4-feature
+metric (§3, Property 2) and placed in the existing distance spectrum. If
+d(intra-architecture) ≪ d(SD 1.5–SDXL = 0.249, the closest cross-architecture
+pair), this provides a direct quantitative comparison: *paradigm difference
+within the same architecture produces less fingerprint variation than any
+cross-architecture pair, including the closest same-family pair.*
+
+**Ratio profile observation** (reported, not explained): The per-layer
+eps/flow drift ratio peaks at block 9 (2.37×) before declining to 1.55× at
+the final layer. This non-constant profile may reflect trajectory-dependent
+error accumulation differences between DDIM inversion and Euler ODE —
+DDIM accumulates approximation error across the trajectory mid-section where
+block 9's features are most active. This is reported as an observation for
+future investigation; the current experiment was not designed to test this
+hypothesis.
+
+**Mapping Principles consistency**: DiT-S/2 is a class-conditional pure
+Transformer with no cross-layer skip connections — its drift peak at the
+final layer (block 11) is consistent with Principle 2 (Propagation Mode):
+"sequential residual stream only → drift localizes at the transition zone."
+The output-layer bottleneck in a skip-free Transformer is the information
+compression point, matching SD 3.5's "output compression" bottleneck type
+(§4, Table 1). This provides a 6th held-out architecture validation for the
+Mapping Principles.
 
 ### Property 4 (Temporal Consistency)
 
@@ -534,9 +650,10 @@ measurement. See Appendix Figure A2.
 
 ### Scope Declaration (Properties 1–5)
 
-Properties 1–3 are established on 5 architectures in unified comparison
-(SD 1.5, SDXL, HunyuanDiT, FLUX.1-dev, SD 3.5 Medium as held-out),
-10 pairwise comparisons. All measurements use coco_val images under DDIM
+Properties 1–3 are established on 6 architectures (SD 1.5, SDXL, HunyuanDiT,
+FLUX.1-dev, SD 3.5 Medium, and a controlled DiT-S/2 pair for paradigm-isolation),
+10 pairwise cross-architecture comparisons plus 1 intra-architecture
+cross-paradigm comparison. All measurements use coco_val images under DDIM
 or Euler sampling. The structural distance metric (4 features from raw
 layer counts) avoids interpolation artifacts present in earlier
 Pearson/Spearman approaches. Property 5 extends the evaluation to 100

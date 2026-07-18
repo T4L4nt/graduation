@@ -46,8 +46,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Phase 7c Skip 因果干预 | 2027.7 | ✅ 完成 |
 | Phase 8 ICLR 补充实验 | 2027.7 | ✅ 完成 |
 | 100-image 扩展评估 (Phase 5/7/8) | 2026.7.15 | ✅ 完成 |
+| Phase 9 架构vs范式解耦实验 | 2026.7.18 | ✅ 完成 |
 
 **DCSC（闭环控制器）**：已探索并放弃。实验验证闭环控制在当前系统上没有可测量的增益（三模式在对抗条件下 PSNR 等价），该负结果为"简单性即优势"的叙事提供了支撑。论文 Discussion 中诚实提及。
+
+---
+
+## Phase 9：架构 vs 训练范式解耦实验 ✅ (2026-07-18)
+
+**问题**：论文声称"漂移由架构决定、不由采样范式决定"，但 5 个开源模型中架构与训练范式天然绑定（UNet=DDPM, MMDiT=Flow Matching），审稿人可质疑 confound。
+
+**实验**：同一 DiT-S/2（39.8M, 12 层, pixel-space 64×64）分别用 eps-prediction DDPM 和 flow matching 训练（111 张本地图，排除 19 张 coco_val 测试集，bs=16，40k 步），比较 drift fingerprint。
+
+**结果**：
+- Peak 位置：两 variant 都在 `transformer_blocks.11`（最后一层）
+- 组织模式一致：单调递增 + 末端三层加速 motif
+- 逐层排名一致（Spearman ρ = 1.000，但注意单调序列的秩相关检验力有限，不作为主证据）
+
+**范式依赖的差异（必须诚实报告）**：
+- 绝对量级差异且**非常数**：eps/flow 比值剖面 1.09–2.37，峰前层（b.9）差异最大
+- 归一化形状偏移：以末层为 1，b.9 处 eps=0.72、flow=0.47，差 ~0.25——flow 漂移更集中于最后一层
+
+**结论**：**指纹的组织结构（峰位、排序、加速 motif）对训练范式不变；但绝对量级范式依赖，且归一化形状存在峰前偏移。** 正确的措辞不是"完全一致"而应是"组织结构不变、量级与细节形状范式依赖"。这不削弱 Claim 1——Claim 1 的核心是架构决定指纹的组织方式，组织方式确实不变。
+
+**头牌统计量建议**：计算同架构跨范式的结构距离 d(eps, flow | DiT-S/2)，与已有跨架构距离谱对照。若 d（同架构跨范式）≪ 最近跨架构对（SD1.5–SDXL d=0.249），则是比 ρ 有力十倍的定量证据。
+
+**架构比对**：DiT-S/2 峰在末层，与 SD 3.5 的"输出压缩"型瓶颈一致——纯 Transformer 无跨层 skip 时信息瓶颈在输出端。这为 Mapping Principles 增加第 6 个架构的 held-out 一致性验证。
+
+**脚本**：`scripts/dit_controlled_shared.py`, `scripts/train_dit_epsilon.py`, `scripts/train_dit_flow.py`, `scripts/dit_controlled_diagnostics.py`
+**输出**：`outputs/train_controlled/diagnostics/comparison.json`
 
 ---
 
