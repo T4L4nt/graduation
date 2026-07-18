@@ -182,9 +182,36 @@ per-timestep error vector Δ[t] = f_inv[t] − f_recon[t] depends on the
 specific prompt used during the trajectory. A Δ computed under the source
 prompt cannot be transferred to a target-prompt reconstruction. Therefore,
 for prompt-changed editing, content preservation and edit fidelity are
-**structurally coupled** in any method that uses a fixed latent-space
-correction vector — the error-edit entanglement is a fundamental constraint,
-not a tunable trade-off.
+**structurally coupled** in any method that uses a **fixed, pre-computed
+latent-space correction vector** — the error-edit entanglement is a
+fundamental constraint within this method class.
+
+> **Precision on scope.** This boundary applies to latent-space linear
+> correction methods (ours, RLI) that compute a correction vector once
+> and inject it globally. It does **NOT** apply to per-layer attention
+> injection methods (P2P, cross-attention control) that re-route
+> intermediate activations without a single global correction vector.
+> The distinction is physically meaningful: attention injection preserves
+> the *relative* attention structure across tokens, which carries both
+> content and edit information; a single latent correction vector conflates
+> both into one scalar direction.
+
+> **What this boundary implies for practice.** The Architecture Fingerprint
+> Φ(M) tells you which regime you operate in, and therefore which method
+> class you should choose:
+> - **Reconstruction / same-prompt content preservation** → Latent-space
+>   linear correction (ours). Statistically equivalent to P2P (d=0.033),
+>   memory cost hundreds of times lower.
+> - **Prompt-changed editing requiring simultaneous content preservation
+>   AND edit fidelity** → Attention injection (P2P class) or per-image
+>   optimization. Our correction preserves content but collapses edit
+>   direction; the boundary result explains WHY — it is structural, not
+>   a tuning failure.
+> - **Diagnosis-first approach:** Φ(M) reveals the architecture's
+>   inversion error profile; this profile tells you whether the correction
+>   is likely to conflict with editing (presence/proximity of error peak
+>   to key semantic layers). The diagnosis framework thus provides a principled
+>   decision rule for method selection, not just a correction recipe.
 
 **Reconciliation with Property 5 (prompt robustness).** Property 5 shows
 that correction *efficacy* (ΔPSNR) is stable across prompts. Plan B shows
@@ -406,9 +433,11 @@ no measured phenomenon to explain.
 and across random seeds, under fixed measurement protocol.
 
 *Evidence:* 19 coco_val images, leave-one-out cross-validation.
-Pearson r = 1.000 (mean across 19 folds, min = 1.000).
-Multi-seed measurement (3 seeds × 5 images): σ/mean = 0.1% per layer.
-(SD 1.5, 50-step DDIM. Data: `outputs/phase1_reproducibility/reproducibility.json`.)
+Pearson r = 0.999995 ± 0.000008 (mean ± SD across 19 folds, min = 0.999969,
+max = 0.999999). Reporting convention: ">0.9999," not "=1.000".
+Multi-seed measurement (3 seeds × 5 images): σ/mean = 0.096% per layer
+(mean across all layers). (SD 1.5, 50-step DDIM. Data:
+`outputs/phase1_reproducibility/reproducibility.json`.)
 
 ### Property 2 (Inter-architecture Differentiation)
 
