@@ -478,23 +478,39 @@ a common 57-point grid creates up to 51% synthetic data points for
 architectures with fewer layers (e.g., SDXL 28→57). The structural
 distance metric avoids both issues entirely.
 
-Structural distance matrix (lower = more similar):
+**Ranking stability of structural distance (2026-07-19 Phase 9 audit):**
 
-| Pairing | d | Interpretation |
-|---------|---|---------------|
-| **SD 1.5 vs SDXL** | **0.249** | Same UNet family — closest |
-| **FLUX vs SD 3.5** | **0.385** | Same MM-DiT backbone — second closest |
-| SDXL vs HunyuanDiT | 0.506 | Different backbone, moderate |
-| SD 1.5 vs HunyuanDiT | 0.624 | Different backbone |
-| SDXL vs FLUX | 0.628 | Different backbone + paradigm |
-| SD 1.5 vs FLUX | 0.637 | Different backbone + paradigm |
-| SD 1.5 vs SD 3.5 | 0.722 | Different backbone |
-| SDXL vs SD 3.5 | 0.803 | Different backbone |
-| **HunyuanDiT vs FLUX** | **1.077** | Both Transformer, but single vs dual-stream — **farthest** |
-| HunyuanDiT vs SD 3.5 | 1.165 | Different backbone, farthest overall |
+The 4-feature structural distance metric has high value instability (CV=0.90
+across normalization schemes), making raw distance values unreliable as
+quantitative evidence. However, the **ranking** of pairwise distances is
+highly stable: Kendall's W = 0.938 (p=9.8e-5) across four normalization
+schemes (min-max, z-score, L2, LayerNorm). Key findings:
 
-Same-family pairs (both UNet: d=0.249; both MM-DiT: d=0.385) are
-systematically closer than cross-family pairs (all d > 0.5).
+| Pair | Ranks [mm,zs,l2,ln] | CV | Status |
+|------|---------------------|-----|--------|
+| **SD 1.5 vs SDXL** | [0,0,0,0] | 0.000 | Consistently closest |
+| SD 1.5 vs SD3.5 | [1,2,1,2] | 0.200 | Near-cluster, stable |
+| SDXL vs SD3.5 | [2,3,2,3] | 0.143 | Near-cluster, stable |
+| SDXL vs DiT | [4,4,3,4] | 0.091 | Mid-rank, stable |
+| SD 1.5 vs DiT | [5,5,4,5] | 0.075 | Mid-rank, stable |
+| SDXL vs FLUX | [7,7,7,7] | 0.000 | Far-cluster, perfect consistency |
+| SD 1.5 vs FLUX | [6,6,8,6] | 0.115 | Far-cluster, stable |
+| FLUX vs SD3.5 | [8,8,6,8] | 0.102 | **Far-cluster** (not "second closest") |
+| **DiT vs FLUX** | [9,9,9,9] | 0.000 | Consistently furthest |
+| DiT vs SD3.5 | [3,1,5,1] | **0.474** | **UNSTABLE — metric artifact** |
+
+**Critical correction (2026-07-19)**: FLUX vs SD 3.5 is NOT "second closest."
+The fp16 re-measurement (replacing bf16 with 16.9% systematic bias) confirms
+FLUX-SD3.5 ranks 6-8/9 across all normalizations (far-cluster). The previous
+bf16-based claim of d=0.385 as "same MM-DiT backbone, second closest" was an
+artifact of (a) bf16 precision bias and (b) normalization-sensitive feature
+extraction. **The held-out confirmation narrative for SD 3.5 is retracted.**
+
+The surviving structure: same-family does NOT predict proximity. SD 1.5-SDXL
+(both UNet) IS closest, but FLUX-SD3.5 (both MM-DiT) is far. Attention topology
+— not backbone family — determines fingerprint similarity. The two bookend pairs
+(SD1.5-SDXL closest, DiT-FLUX furthest) are the only pairs with CV=0.000,
+meaning the core narrative rests on the most robustly measured evidence.
 
 **Reference point — intra-architecture cross-paradigm comparison:**
 A controlled DiT-S/2 pair (identical architecture, eps-prediction DDPM vs
@@ -516,24 +532,34 @@ identification. See Property 3 for detailed experimental protocol and
 the two-layer finding table. See Figure 2 for the 5-curve overlay and
 structural distance matrix.
 
-**Metric compatibility note**: the 4-feature structural distance d(eps, flow)
-is not directly comparable to the cross-architecture distance matrix above
-because (a) DiT-S/2 has only 12 layers (vs 28–57 for the 5 primary
-architectures), making the `n_peaks` feature too coarse; (b) the distances
-were designed for cross-backbone comparisons, not intra-architecture
-paradigm comparisons. The normalized profile overlay and peak position
-identity are the primary evidence; cross-paradigm effect size is reported
-qualitatively through the profile table above.
+**Metric compatibility note (2026-07-19 Phase 9 audit):** The 4-feature structural
+distance d(eps, flow | DiT-S/2) = 2.000 (raw) / 1.001-2.003 (normalized) is NOT
+smaller than the closest cross-architecture pair (SD 1.5-SDXL). The original
+hypothesis that "d(intra-architecture) ≪ d(closest cross-architecture)" is
+**falsified** — the quantitative version of "paradigm difference ≪ architecture
+difference" is not supported by the structural distance metric.
+
+This negative result, combined with the CV=0.90 metric instability, motivates the
+shift from value-based to rank-based reporting. The surviving qualitative evidence
+for paradigm-independence (peak position, organizational motif, acceleration pattern)
+is reported separately as the two-layer component decomposition (see Property 3).
 
 ### Property 3 (Attention Topology over Broad Backbone Family)
 
-The structural distance matrix reveals that attention topology
-(single-stream vs dual-stream) is a stronger determinant of Φ than the
-broad backbone family (Transformer vs UNet). The HunyuanDiT vs FLUX pair
-— both Transformer-based — is the **farthest** among all 4-architecture
-pairs (d=1.077), exceeding even cross-family distances like SD 1.5 vs
-HunyuanDiT (d=0.624). In contrast, same-family UNet pairs (d=0.249) and
-same-family MM-DiT pairs (d=0.385) are consistently close.
+The **ranking** of pairwise structural distances (not the raw values, which
+are normalization-sensitive) reveals that attention topology — not backbone
+family — determines fingerprint similarity. Ranking is highly stable across
+four normalization schemes (Kendall's W = 0.938, p=9.8e-5).
+
+- **SD 1.5 vs SDXL** (both UNet): consistently closest (rank CV=0.000)
+- **HunyuanDiT vs FLUX** (both Transformer): consistently furthest (rank CV=0.000)
+- **FLUX vs SD 3.5** (both MM-DiT): far-cluster (rank 6-8/9), NOT "second closest"
+
+Family label does not predict proximity: SD 1.5-SDXL IS closest (same UNet),
+but FLUX-SD3.5 is far (same MM-DiT but different attention topology — dual-stream
+vs. dual→standard transition). What predicts proximity is the specific attention
+topology and cross-modal interaction boundary structure, not the broad
+"Transformer vs UNet" dichotomy.
 
 This refines the earlier "Backbone Dominance" framing: backbone *family*
 does not dominate — *specific attention topology* (single-stream joint
@@ -545,13 +571,14 @@ mapping (Section 3.4), which identifies (a) information flow graph,
 as the three predictive features, none of which reduce to a simple
 "CNN vs Transformer" dichotomy.
 
-*Evidence (correlational):* Structural distance matrix (5 architectures, 10 pairs).
-HunyuanDiT (single-stream Transformer, DDIM v-pred) and FLUX (dual-stream
-MM-DiT, Flow Match) share a Transformer backbone but differ in attention
-topology — and are structurally farthest. SD 1.5 (UNet, DDIM) and SDXL
-(UNet, DDIM) share both backbone and paradigm — and are closest. SD 3.5
-(held-out) and FLUX share MM-DiT backbone — second closest, confirming
-the framework's predictive value.
+*Evidence (correlational):* Rank-stable structural distance matrix (5 architectures,
+10 pairs, Kendall's W=0.938). Attention topology differences (single-stream vs
+dual-stream) produce the largest fingerprint divergence regardless of backbone
+family. FLUX-SD3.5 (both MM-DiT) are far apart due to different attention
+transition structures (dual-stream vs dual→standard). **The previous claim of
+SD 3.5 as "held-out confirmation" of the framework's predictive value is
+retracted** — it was based on bf16-biased distance values that placed the pair
+artificially close.
 
 **Limitation of the above evidence**: architecture and training paradigm are
 naturally confounded in all publicly available models (UNet = DDPM-trained,
@@ -599,12 +626,23 @@ making rank correlation nearly vacuous (any two monotonically increasing
 sequences will show ρ ≈ 1). The primary evidence for organizational invariance
 is peak position identity and the shared acceleration motif.
 
-**Structural distance**: The intra-architecture cross-paradigm structural
-distance d(eps, flow | DiT-S/2) will be computed using the same 4-feature
-metric (§3, Property 2) and placed in the existing distance spectrum. If
-d(intra-architecture) ≪ d(SD 1.5–SDXL = 0.249, the closest cross-architecture
-pair), this provides a direct quantitative comparison: *paradigm difference
-within the same architecture produces less fingerprint variation than any
+**Structural distance (Phase 9 result — 2026-07-19):** The intra-architecture
+cross-paradigm structural distance d(eps, flow | DiT-S/2) was measured and
+compared against the cross-architecture spectrum. **The comparison is a negative
+result**: d(eps, flow) ≥ d_min_cross under all normalization schemes
+(ratio range 0.98x–25.98x, CV=0.90). The original hypothesis that
+"d(intra-architecture) ≪ d(closest cross-architecture)" is **falsified**.
+
+The structural distance metric's value instability (CV=0.90 across
+normalizations) and the falsified quantitative hypothesis together motivate
+the shift from value-based to rank-based reporting. The surviving evidence
+for paradigm-independence is qualitative (peak position, organizational motif);
+the surviving evidence for cross-architecture distinguishability is ranking-based
+(Kendall's W=0.938). The DiT-S/2 controlled experiment is reframed from
+"supporting evidence" to "boundary-calibration experiment": it defines the
+limit at which the quantitative distance metric breaks down, and demarcates
+the architecture-determined component (organizational structure) from the
+paradigm-modulated component (magnitude, fine shape).
 cross-architecture pair, including the closest same-family pair.*
 
 **Ratio profile observation** (reported, not explained): The per-layer
@@ -724,8 +762,23 @@ removing it triggers drift.
 - Interaction **removed** (FLUX joint→single, HunyuanDiT): drift peak
 - Interaction **added** (SD 3.5 dual→standard): drift valley
 
-*Validation:* FLUX joint_18 (last joint block before single-stream) shows
-both the highest image drift (0.713) and a jump in text drift (0.12→0.44).
+*Validation (fp16, 2026-07-19 re-measurement):* FLUX joint_18 (last joint block before
+single-stream) shows a spike in both image drift (joint_17=0.51→joint_18=0.79, 1.55x)
+and text drift (joint_17=0.25→joint_18=0.50, 2.0x; joint_0..17 mean=0.17→0.50, 3.0x).
+Both signals spike at the same architectural boundary — consistent with the
+hypothesis that the cross-modal interaction boundary acts as a feature stabilizer
+whose removal (at the joint→single handoff) triggers simultaneous destabilization
+in both modalities. (Note: this is mechanism-consistent evidence, not causal proof;
+causal intervention at this boundary — e.g., masking text attention in joint blocks
+and measuring the effect on hidden drift — would be needed for a causal claim.)
+
+**Measurement protocol (Appendix A.X):** Text drift measured via FluxFeatureExtractor
+hooks on all 57 transformer blocks. Encoder (text token) features are the
+encoder_hidden_states output of each block. Drift = MSE(f_inv.encoder, f_recon.encoder)
+at turnaround t=1, mean over 77 T5 text tokens, aggregated across 5 COCO val100 images.
+fp16 precision, 28-step Euler inversion. Image (hidden) drift measured analogously on
+hidden_states output. Previous bf16 values (0.713, 0.12→0.44) are superseded by these
+fp16 numbers.
 SD 3.5 blocks 0-12 (dual attention) show the lowest drift in the model;
 drift rises sharply after block 13 (standard attention only).
 

@@ -233,7 +233,7 @@ def main():
 
     # Reduced set for Plan B: first time, check on 20 images to get α estimate,
     # then full run
-    USE_FULL = False  # Quick 20-image test for fine λ check
+    USE_FULL = True  # Full 100-image run (2026-07-18)
     img_items = list(edit_pairs.items())
     if not USE_FULL:
         img_items = img_items[:20]
