@@ -1,7 +1,25 @@
 # Architecture Fingerprint of Feature Drift in Diffusion Inversion
 
 > ICLR 2027 投稿大纲。严格对齐已验证数据，不伪造、不外推。
-> 版本：v1.2，基于 P0b 全部实验（工单 16/20 完成）+ PixArt-Σ + 盲测 + 结晶曲线。
+> 版本：v2.0，基于 AC 级评审反馈重写——以概念必要性、证据层级、泛化意义为三条主线。
+
+---
+
+## ICLR AC 预评审摘要
+
+| 维度 | 评分 | 说明 |
+|------|------|------|
+| Novelty | 8.5–9.5 | 提出新的分析对象（概念抽象层），但"概念必要性"是最大风险 |
+| Technical Quality | 不可仅从摘要判断 | 机制 claim 需要因果证据，不能只有相关性 |
+| Empirical Evaluation | 强 | 假设驱动设计，不是 benchmark 堆砌 |
+| Clarity | 8.5 | 概念主线清晰，正文需避免信息过载 |
+| Significance | 8.5 | 有潜力，取决于泛化性——能否超越"解释 drift" |
+| **Overall** | **8–9** | 竞争力区间；上限由正文论证质量决定 |
+
+**三个最需要正文回答的问题：**
+1. **概念必要性**：为什么 Architecture Fingerprint 不是 "layer-wise drift profile" 的重新命名？
+2. **证据层级**：哪些结论是观察（correlation），哪些有因果支持（intervention）？必须明确界定。
+3. **泛化意义**：为什么这个概念不仅解释了你的现象，而且能成为理解扩散模型架构的通用分析框架？
 
 ---
 
@@ -19,219 +37,211 @@
 
 ## 1. Introduction
 
-### 1.1 问题设定
-- 扩散反演（DDIM inversion）是图像编辑的标准前处理：将真实图像编码为噪声潜变量，再以不同 prompt 重建
-- 反演-重建之间存在特征漂移（feature drift）：f_inv ≠ f_recon，逐层 L2 偏差可达 1000 倍跨层差异
-- 现有方法将漂移视为待抑制的随机误差——通过更好的可逆性（EDICT）、轨迹优化（NTI）、注意力注入（P2P）
-- 我们提出一个不同的视角：**漂移的组织结构本身携带信息**
+### 1.1 问题设定与概念必要性
 
-### 1.2 核心主张：Architecture Fingerprint
-> 特征漂移不是随机噪声——其逐层组织模式（峰位、峰数、浓度、展宽）是由 backbone attention 拓扑决定的、可复现的架构级签名。
+> **这是全文最重要的段落。必须回答："为什么 Architecture Fingerprint 不是 layer-wise drift profile 的重新命名？"**
 
-### 1.3 四层可证伪主张（C1–C4）
+- 扩散反演在重建图像时引入逐层特征漂移（feature drift）：f_inv ≠ f_recon
+- 现有工作将漂移视为待抑制的不稳定因素——EDICT 追求可逆性，NTI 优化轨迹，P2P 注入注意力
+- **视角转换**：如果漂移不是噪声，而是架构的签名呢？
+- **概念必要性论证**（必须写进 Introduction，约半页）：
+  - Layer-wise drift profile 只能回答 "哪一层漂移最大" —— 它是一个局部观测量
+  - Architecture Fingerprint 回答的是 "为什么这个架构以这种方式漂移" —— 它是一个架构级描述符
+  - 这个抽象不是文字游戏：没有它，跨架构比较没有共同语言（不同架构层数不同，profile 不可直接比较）；拓扑解释没有目标（profile 本身不携带架构信息）；机制分析没有测量对象（冲突、信息瓶颈需要定位到具体结构组件）
+  - 具体对比例子：两个 UNet（SD 1.5 和 SDXL）的 layer-wise drift profile 形状完全不同（层数不同），但它们的 Architecture Fingerprint 在特征空间中落入同一聚类——profile 无法揭示的东西，指纹可以
 
-| 层级 | 主张 | 证伪条件 | 证据状态 |
-|------|------|---------|---------|
-| **C1** | Φ(M) 是稳定的、可复现的测量——对权重扰动（跨 checkpoint）不变，对架构差异响应 | D_s(intra-checkpoint) ≥ min D_s(inter-arch) | ✅ 闭合 |
-| **C2** | 漂移组织结构按 attention 拓扑聚类，拓扑解释的组间方差超过 family/训练目标/采样器的贡献 | PERMANOVA: R²_topology ≯ R²_other | ✅ 10-pair v2 矩阵支持 |
-| **C3** | 组织结构对训练目标不变（ε-预测 vs flow matching），绝对量级范式依赖 | 峰位跨训练目标不一致 | ✅ DiT-S/2 对照实验 |
-| **C4** | 每个架构的因果结构可从 Φ(M) 诊断；最简校正与复杂方法等价；方法论泛化，干预方向实例特异 | 架构内冲突指数与消融效应秩相关不显著 | ✅ SD1.5+SDXL 因果干预 |
+### 1.2 中心主张：Architecture Fingerprint 作为统一分析对象
 
-### 1.4 论文结构
+> 不是 "我们发现了一个现象" —— 而是 "我们提出了一个分析对象，并证明它有用"。
+
+**Architecture Fingerprint Φ(M)** —— 架构 M 在固定反演协议下，逐层漂移的归一化组织模式。它不是理论（不解释为什么），不是假说（不预测如何传播），而是一个**测量框架**——它为后续的分析（拓扑映射）、解释（机制分析）和利用（诊断校正）提供了共同的基础。
+
+**分量级不变性**：指纹的不同分量服从不同的不变性规律——
+- 拓扑分量（峰位）：严格不变，跨越训练步数、训练目标、checkpoint 更替、LoRA、编码器替换
+- 度量分量（浓度、展宽、形状）：条件依赖，对强微调呈弱变异
+
+**生成机制**：网络拓扑定义可能形成的指纹空间（随机初始化 UNet 有完整峰结构但峰位不同），训练负责选择并锁定其中的具体实例（DiT 结晶曲线：峰位在 10k–30k 步写入后不再变动）。
+
+### 1.3 论文路线图
+
 ```
-§2  Related Work     — 三条文献线的边界划定
-§3  Discovery        — Φ(M) 定义 + Properties 1–3 (C1–C3 证据)
-§4  Mapping Principles — 架构拓扑 → 漂移指纹的预测性映射
-§5  Mechanism         — Skip Conflict 因果链 (SD1.5 + SDXL)
-§6  Application       — 诊断驱动的校正 + 编辑中的内容锚定
-§7  Discussion        — 局限、开放问题、度量审计
+§2  Related Work     — 三条文献线的边界划定（反演误差 / 表示分析 / 架构差异）
+§3  Architecture Fingerprint — 定义 + 三性质 (C1 分量级不变性, C2 按交互机制聚类, C3 目标不变性)
+§4  Mapping Principles — 从架构拓扑到指纹形状的解释性映射
+§5  Mechanism         — 因果链：skip conflict (UNet) + cross-modal boundary (MM-DiT)
+§6  Application       — 诊断驱动的校正 (Diagnosis → Correction)
+§7  Discussion        — 局限、概念必要性反思、泛化前景
 ```
+
+### 1.4 证据层级声明（贯穿全文）
+
+> 这是阻止 "Observation paper" 陷阱的关键。每一章必须明确标注证据类型。
+
+| 层级 | 定义 | 论文中的例子 |
+|------|------|-------------|
+| **Observation** | 测量到但未解释的模式 | 五架构漂移剖面叠加、峰位分布 |
+| **Correlation** | 统计关联，不声称因果 | ρ(drift, ΔW)=0.24, Spearman 跨采样器 |
+| **Intervention** | 操纵变量后测量效应 | Cut A/B 切除, Noise A 噪声替换, α 剂量 |
+| **Prediction** | 冻结假设后在 held-out 数据上验证 | 预注册冲突指数盲测 (pending) |
+| **Falsification** | 主动寻找反例 | PixArt-Σ 部分证伪 C2 简单版, SDXL 反号 |
 
 ---
 
-## 2. Related Work
+## 2. 概念必要性：Why "Fingerprint" Matters
 
-### 2.1 反演误差与轨迹偏差
-- DDIM inversion (Song et al., 2021); EDICT (Wallace et al., 2023); NTI (Mokady et al., 2023)
-- RF-Inversion (ICLR 2025); RF-Solver (ICML 2025); FlowEdit (ICCV 2025)
-- **划界**：已有工作讨论反演轨迹偏差的存在性与修正，我们的贡献不是"发现漂移"，而是"漂移的组织结构是架构属性"
+> **这是全文最关键的半页。放在 §3 开头或作为 §3.1 的独立子节。**
 
-### 2.2 架构内部表示分析
-- Diffusion Hyperfeatures; h-space/Asyrp; 逐层 probing
-- FeatureInject / One Size Does Not Fit All (OpenReview 2025): 分析前向生成中语义表示的形成位置
-- **划界**：已有工作分析前向生成中的语义形成，不涉及反演-重建不一致性；漂移峰位与语义形成带不重合
+### 2.1 Layer-wise Drift Profile ≠ Architecture Fingerprint
 
-### 2.3 架构差异与特征行为
-- MMDiT 编辑方法对 single/dual-stream 层的经验性区分 (FireFlow, DiTCtrl)
-- **划界**：这些工作知道不同层段对编辑敏感度不同，但没有将其系统化为可测量的架构签名
+| 维度 | Layer-wise Drift Profile | Architecture Fingerprint |
+|------|------------------------|-------------------------|
+| 抽象层级 | 局部观测量 | 架构级描述符 |
+| 回答的问题 | 哪一层漂移最大？ | 为什么这个架构以这种方式漂移？ |
+| 跨架构比较 | 不可直接比较（层数不同） | v2 连续度量支持 pairwise 比较 |
+| 携带架构信息 | 否——profile 本身不含拓扑语义 | 是——可映射到信息瓶颈、skip 结构、跨模态边界 |
+| 可诊断性 | 只能排序层 | 可定位因果冲突源 |
 
-### 2.4 术语排雷
-- "drift" ≠ SDE 中的漂移项（Fokker-Planck drift; cf. DriftLite, ICLR 2026）
-- "fingerprint" ≠ 生成模型取证中的架构指纹识别
+### 2.2 具体的必要性示例
+
+- 没有 Fingerprint 框架：跨架构比较只能做 "SD 1.5 有 38 层，SDXL 有 28 层，它们的 drift profile 不一样" —— 这是平凡观察
+- 有 Fingerprint 框架：提取峰位、浓度、展宽三个连续分量 → 计算 pairwise 结构距离 → 发现 FLUX-SD3.5 最近（0.092），DiT-FLUX 最远（0.618）→ 揭示跨模态交互机制是聚类主因
+- 没有 Fingerprint 框架：随机初始化 UNet 的 drift profile "看起来不同" —— 定性描述
+- 有 Fingerprint 框架：峰位从 0.079 移到 0.763 → 量化了"训练重定位指纹"的效应量（D_s=0.699）→ 揭示拓扑定义空间、训练选择实例
 
 ---
 
 ## 3. Architecture Fingerprint: Definition and Properties
 
-### 3.1 Formal Definition
+### 3.1 形式化定义
 
-**Definition 1 (Feature Drift).** 对于架构 M 的 L 层，固定反演协议 P（DDIM, T=50, 空 prompt），图像 x 的逐层漂移：
+**Definition 1 (Feature Drift).** 架构 M 在反演协议 P 下，逐层反演-重建特征偏差：
 ```
 d_l(x) = E_{t∈K}[ || f_l^inv(x, t) − f_l^recon(x, t) ||_2 ]
 ```
-其中 K 为固定采样时间步集合。
 
-**Definition 2 (Architecture Fingerprint).** M 在协议 P 下的架构指纹为：
+**Definition 2 (Architecture Fingerprint).** 
 ```
 Φ(M) = Normalize({ E_{x∈D}[ d_l(x) ] }_{l=1}^{L} ) ∈ [0,1]^L
 ```
-Φ(M) 是测量剖面——它声明对 D, P, norm 的依赖，不宣称跨条件不变性。
+Φ(M) 声明对 D（图像集）、P（反演协议）、norm（归一化方案）的依赖——它是**测量剖面**，不宣称跨条件不变性。
 
-### 3.2 Property 1: Intra-architecture Reproducibility (C1)
+**Definition 3 (v2 Structural Distance).**
+```
+D_s(A, B) = sqrt( D_pp² + D_shape² + D_mag² )
+```
+- D_pp = |peak_position_A − peak_position_B|
+- D_shape = 1 − Spearman ρ(profile_A, profile_B)（仅同长度架构可用）
+- D_mag = L2(concentration, spread)
+- D_total (cross-arch) = sqrt(D_pp² + D_mag²)
 
-**主张（分量级不变性）**：Φ(M) 的拓扑分量（峰位）在 checkpoint 谱系内严格不变——从继续训练到全量微调；度量分量对强微调呈弱变异，且最大弱变异仍不到最近跨架构距离的一半。权重空间的 L2 距离不预测指纹距离——功能子空间的方向决定，量级不决定。
+噪声底（B=100 bootstrap）：median=0.0071, p95=0.0163
 
-**证据 A — 跨 checkpoint 谱系**：
+### 3.2 Property 1: Component-Level Invariance (C1)
 
-| 配对 | ΔW median | D_s | D_pp | D_shape | D_mag | 性质 |
-|------|----------|-----|------|---------|-------|------|
-| SD 1.4 ↔ SD 1.5 | 0.209 | **0.0106** | 0.000 | 0.004 | — | 继续训练，低于噪声底 |
-| RV ↔ SD 1.5 | 0.139 | **0.0425** | 0.000 | 0.036 | 0.023 | 全量微调，弱变异 |
+**主张**：Φ(M) 的拓扑分量（峰位）在 checkpoint 谱系内严格不变——从继续训练到全量微调。度量分量对强微调呈弱变异，最大变异仍不到最近跨架构距离的一半。
 
-- 峰位在所有条件下严格不变（D_pp ≡ 0.000）
-- 弱变异集中于度量分量（D_shape 贡献 RV D_total 的 84%）
-- ΔW(RV) < ΔW(SD1.4)，但 D_s(RV) > D_s(SD1.4)——权重 L2 距离不预测指纹距离
-- D_s(RV) = 0.0425 < min 跨架构 D_s (0.092) ——最近质心分类正确归队
+**证据层级**：
 
-**证据 B — 受控权重扰动剂量曲线**：
-- 高斯噪声 ε ∈ [1e-6, 1e-3]：ε ≤ 1e-4 D_total < 噪声底，D_pp ≡ 0.000 跨越全部有效剂量
-- 死亡层级：D_mag 最先退化 → D_shape → D_pp 为硬不变量
-- 真实 checkpoint ΔW（0.139–0.209）超出高斯稳定区（1e-4）三个数量级——随机敏感度不能外推至结构化差异
+| 实验 | 类型 | 结论 |
+|------|------|------|
+| SD 1.4 ↔ SD 1.5 直接测量 | Observation | D_s=0.011, D_pp=0.000 |
+| RV ↔ SD 1.5 直接测量 | Observation | D_s=0.043, D_pp=0.000 |
+| LCM LoRA ↔ SD 1.5 | Observation | D_s=0.021, D_pp=0.000 |
+| RandText ↔ SD 1.5 | Observation | D_s=0.034, D_pp=0.000 |
+| v4 高斯扰动剂量曲线 | Intervention | ε≤1e-4 全部 < 噪声底, D_pp 全程 0.000 |
+| DiT-S/2 训练结晶曲线 | Observation (trajectory) | 峰位 10k(eps)/30k(flow) 锁定 |
+| 随机初始化 UNet | Intervention | D_s=0.699, 峰位 0.079 → 训练 0.763 |
+| ΔW 测量 (SD1.4↔1.5, RV) | Observation | ΔW=0.14–0.21, 3 个数量级超稳定区 |
 
-**证据 C — Bootstrap 噪声底**：B=100，D_total median=0.0071，p95=0.0163
+**边界谱系图**（论文的核心可视化之一）：
 
-**Figure 3.1**: 权重扰动剂量曲线，标注 SD 1.4 与 RV 的实测 D_s 位置
+```
+SD1.4(0.011) < LCM(0.021) < RandText(0.034) < RV(0.043) ‖ inter-arch(0.092) ‖ DiT-FLUX(0.618) ‖ random(0.699)
+         ← 谱系带 →                    ← 跨架构带 →          ← 未训练 →
+```
 
-### 3.3 Property 2: Inter-architecture Differentiation (C2)
+**注意**：C1 不声称 "对所有扰动不变" —— 度量分量对强微调有可检测的弱变异（RV 0.043）。但即使这个最大变异，仍然不到最近跨架构距离（0.092）的一半。这是**诚实的弱变异**，不是失败的 invariance。
 
-**主张**：不同架构的 Φ(M) 可测量区分，且相似度按 attention 拓扑聚类。
+### 3.3 Property 2: Clustering by Cross-Modal Mechanism (C2)
 
-**证据 — 跨架构 v2 结构距离矩阵**（D_s = sqrt(D_pp² + D_mag²)，连续分量，无 peak_count）：
+**主张**：指纹相似性由跨模态交互机制决定，而非简单的 attention 拓扑二分（single vs dual stream）。
 
-| 配对 | v2 D_total | 解读 |
-|------|-----------|------|
-| FLUX-SD3.5 | **0.092** | 同 MM-DiT 最近 |
-| DiT-SDXL | 0.188 | 不同 backbone |
-| SD1.5-SDXL | 0.336 | 同 UNet family |
-| SD1.5-SD3.5 | 0.385 | 不同 backbone |
-| SD3.5-SDXL | 0.429 | 不同 backbone |
-| FLUX-SDXL | 0.437 | 不同 backbone+目标 |
-| FLUX-SD1.5 | 0.457 | 不同 backbone+目标 |
-| DiT-SD1.5 | 0.473 | 不同 backbone |
-| DiT-SD3.5 | 0.615 | 不同 backbone |
-| **DiT-FLUX** | **0.618** | single≠dual-stream 最远 |
+**证据层级**：
 
-- 所有跨架构 D_s >> 噪声底 p95 (0.016)：架构清晰可区分
-- 同 MM-DiT backbone（FLUX-SD3.5）最近，attention 拓扑差异最大（DiT single-stream vs FLUX dual-stream）最远
-- 范围 [0.092, 0.618]，比旧含 peak_count 的度量 [0.249, 1.165] 压缩但排序更稳健
+| 实验 | 类型 | 结论 |
+|------|------|------|
+| 五架构 v2 pairwise 矩阵 | Observation | FLUX-SD3.5 最近(0.092), DiT-FLUX 最远(0.618) |
+| PixArt-Σ 指纹加入矩阵 | **Falsification** | 同 topo 的 DiT-PixArt D_s=0.571 最远！PixArt 聚类到 MM-DiT |
+| 最近质心分类盲测 | Prediction | RV/LCM/RandText 3/3 正确归入 UNet; PixArt 错归 UNet |
 
-**Figure 3.2**: 五架构漂移剖面叠加图 + 结构距离矩阵热力图
+**关键发现**：PixArt 和 HunyuanDiT 同属 "single-stream Transformer with cross-attention"，但它们的指纹距离（0.571）反而比 PixArt vs FLUX（0.234，不同拓扑类）更大。这两个架构的共同点不是 attention 模式，而是跨模态交互的具体实现（T5 text encoder + split processing）——PixArt 与 SD3/FLUX 共享此实现。这意味着 C2 的简单版本（"attention 拓扑决定指纹"）被 PixArt 数据**部分证伪**，更准确的表述是：**"跨模态交互的具体实现机制，而非 attation 是 single 还是 dual stream，决定了指纹的聚类方式。"**
 
-### 3.4 Property 3: Training Objective Invariance (C3)
+### 3.4 Property 3: Objective Invariance (C3)
 
-**主张（收窄版）**：指纹的峰位与浓度对训练目标不变，绝对量级与归一化预峰形状范式依赖。
+**主张**：峰位与浓度对训练目标不变，绝对量级与归一化预峰形状范式依赖。
 
-**证据 — 同架构 DiT-S/2 双目标对照**：
-- 同一 DiT-S/2（39.8M, 12 blocks），eps-prediction DDPM vs flow matching，相同训练数据（111 图），相同步数（40k），相同初始化种子
-- 峰位：两变体均在 block 11 — 一致
-- 浓度（top 20% 漂移占比）：0.728 vs 0.739 — 差 0.011，可忽略
-- 绝对量级：eps 均值约 1.55×，比值剖面非常数（1.09–2.37）
-- 归一化形状：block 8–9 处 eps 漂移更分散（eps=0.39→0.71 vs flow=0.29→0.44），预峰差异最大在 block 9（差 0.27）
+**证据层级**：
 
-**正确措辞**：峰位与浓度是训练目标不变量（归因于架构瓶颈位置）；绝对量级与预峰斜率是范式依赖量（归因于轨迹动力学的差异累积）。此措辞与 C1 分量级不变性（峰位为序数不变量）完全对齐。
-
-**Figure 3.3**: DiT-S/2 两变体漂移剖面叠加 + eps/flow 比值图
+| 实验 | 类型 | 结论 |
+|------|------|------|
+| DiT-S/2 eps vs flow 对照 | Intervention (controlled) | 峰位同归 block 11, 浓度差 0.011 |
+| eps 结晶曲线 (10k–50k) | Observation (trajectory) | 峰位 10k 锁定, D_total 10k→40k 降 86% |
+| flow 结晶曲线 (10k–50k) | Observation (trajectory) | 峰位 30k 锁定, 收敛速度慢于 eps |
+| 采样器 swap (SD1.5 ×5) | Intervention | 确定性 ODE 保持峰位, 随机 DDIM(η=1) 移位 |
 
 ---
 
-## 4. Mapping Principles: From Architecture Topology to Drift Profile
+## 4. Mapping Principles
 
 **定位**：假设级原则，通过 held-out 验证与因果干预验证。不宣称普遍定理。
 
-### 4.1 Principle 1: Bottleneck Localization
-- 漂移集中在架构的信息瓶颈处——表征能力最受约束的位置
-- UNet: encoder-decoder 交汇区或 mid_block funnel
-- Single-stream Transformer: 表示相变区
-- MM-DiT dual-stream: joint→single 跨模态交互边界
-- MM-DiT-X: 输出压缩区
+- **Principle 1 (Bottleneck Localization)**: 漂移峰位与架构的信息瓶颈重合（p≈3×10⁻⁴, 二项检验, 5/5 架构）
+- **Principle 2 (Propagation Mode)**: Skip 连接传播漂移信号（Cut A vs Cut B 提供因果验证）
+- **Principle 3 (Cross-Modal Boundary)**: 跨模态交互边界是特征稳定器（FLUX joint_18 双模态 spike 提供观测支持，因果干预 pending）
 
-**验证**：5/5 架构实测峰位落在独立识别的瓶颈预测窗内（p ≈ 3×10⁻⁴，二项检验）
-
-### 4.2 Principle 2: Propagation Mode
-- 跨层 skip 连接 → 漂移信号传出瓶颈 → 宽 decoder 峰（UNet）
-- 仅有顺序残差流 → 漂移局域化于相变区 → 窄峰（Transformer）
-- Dual-stream attention → 跨模态混合稳定特征 → 漂移集中于 single-stream 区（MM-DiT）
-
-**验证**：因果干预——切断 peak skip 改变指纹形状（31/38 层显著），切断低漂移 skip 无显著变化（5/38 层）
-
-### 4.3 Principle 3: Cross-modal Boundary Effect
-- 移除跨模态交互 → 漂移峰（FLUX joint→single, HunyuanDiT）
-- 添加跨模态交互 → 漂移谷（SD 3.5 dual→standard）
-- FLUX joint_18 处 image drift 1.55× spike + text drift 3.0× spike——双模态在同一架构边界同时失稳
-
-**Table 4.1**: Architecture topology → drift fingerprint 预测性映射
-（Architecture, Topology, Bottleneck type, Predicted peak, Measured peak）
+**证据层级**：Principles 1–2 有因果干预支持（Cut A/B, Noise A）。Principle 3 目前是**观测层级**（FLUX 的 1.55×/3.0× spike 是 mechanism-consistent evidence, 不是 causal proof）——正文中诚实标注。
 
 ---
 
-## 5. Mechanism: Skip-Mediated Feature Conflict (C4, architecture-specific)
+## 5. Mechanism
 
-### 5.1 因果链：Skip Conflict 作为中介变量
+### 5.1 因果链：Skip Conflict (UNet)
 
 ```
 Skip strength α → Conflict C → Drift φ_l → Reconstruction PSNR
+   (manipulated)   (mediator)   (observed)    (outcome)
 ```
 
-Conflict C = || s - u ||，s 为 skip 特征，u 为 up_block 接收 skip 前的内部表征。
+**证据层级**：
 
-四个可证伪预测：
-- P1: α↓ → C↓
-- P2: C↓ → φ↓
-- P3: φ↓ → PSNR↑
-- P4 (critical): Conflict ≠ L2 magnitude（噪声实验做因果关系分离）
+| 实验 | 类型 | 结论 |
+|------|------|------|
+| Cut A vs Original | **Intervention** | α=0 → C=0 → φ peak −27.7% → PSNR +2.20 dB |
+| Cut B vs Original | **Intervention** | 低漂移 skip 切除, 5/38 层显著 (n.s.), 效应位点特异 |
+| Dose-response α∈[0,1] | **Intervention** | 单调——无最优调制点, skip 在该位点纯粹有害 |
+| Noise A vs Zero vs Original | **Intervention** | L2↑ 但 PSNR↑ → L2 幅度不是因果变量, 结构化的 Conflict 才是 |
+| ρ(drift, Cut A Δdrift)=−0.59 | **Correlation** | 高漂移层对消融响应最大 —— 预测力而非因果 |
 
-### 5.2 SD 1.5 案例
-
-| 干预 | 漂移变化 | PSNR 变化 | 结论 |
-|------|---------|----------|------|
-| Cut A (α=0, peak skip) | −27.7% (p=4.8e-8) | +2.20 dB (p=0.0005) | Skip = 冲突源 |
-| Cut B (α=0, 低漂移 skip) | +0.8% (n.s.) | −0.11 dB (n.s.) | 效应位点特异 |
-| Noise A (噪声替换 skip) | +6.4% | +2.40 dB | L2↑ 但 Conflict↓ → 双分离 |
-| Dose α∈[0,1] | 单调 | 单调 | 无最优调制点 |
-
-**Figure 5.1**: 四条件对比（Original / Cut A / Cut B / Noise A）+ Δ 图 + 剂量曲线
-
-### 5.3 SDXL 跨架构对比：同一组件的相反因果角色
+### 5.2 跨架构对比：同一组件，相反功能
 
 | 指标 | SD 1.5 Cut A | SDXL Cut A |
 |------|-------------|-----------|
-| 目标 skip | down_blocks.1→up_blocks.2 | down_blocks.0→up_blocks.2 |
-| 漂移峰位 | decoder up_blocks.2（与 cut 重合） | mid_block（与 cut 不重合） |
 | ΔPSNR | **+2.20 dB** | **−11.59 dB** |
 | 功能角色 | 冲突源 | 必要信息通路 |
 
-**核心洞察**：相同结构组件在不同 UNet 变体中扮演相反功能角色——Architecture Fingerprint 是实例级诊断工具，不是 family 级笼统属性。
+**证据层级**：这是 Observation（两个数据点，不是通用规则）。正文措辞："skip connection 的功能角色在不同 UNet 变体中不同——Fingerprint 是诊断工具，不是 family-level 的通用因果处方。"
 
-**Figure 5.2**: SD 1.5 vs SDXL 左右对比图
+### 5.3 功能子空间错位
 
-### 5.4 功能子空间错位：漂移 vs 微调
+- 漂移集中于 ResNet 残差流（信息论：ΔPSNR 2.1× vs Attention）
+- 微调更新集中于 cross-attention K/V（ΔW 测量）
+- 全局 ρ(drift, ΔW)=0.24，跨注意力层仅为 0.05
+- **证据层级**：**Correlation**。正文不能写成 "漂移和微调占据不同空间"，写成 "漂移与微调的功能子空间存在可测量的错位"。
 
-- 漂移集中于 ResNet 残差（信息论：ΔPSNR 2.1× vs Attention）
-- checkpoint 微调更新集中于 cross-attention K/V（ΔW 测量：attn layers top ΔW）
-- Spearman ρ(drift, ΔW) = 0.24（全局弱耦合）；up/attn ρ = 0.05（跨注意力层几乎不相关）
-- 两条边缘分布的交叉 = 子空间分离的直接可视化
+### 5.4 Cross-Modal Boundary (MM-DiT)
 
-**Figure 5.3**: 逐层类型的 mean ΔW vs mean drift 边缘交叉图
+- FLUX joint_18: image drift 1.55× spike + text drift 3.0× spike
+- **证据层级**：**Observation**（mechanism-consistent evidence, 不是 causal proof）。正文标注："这是与 mechanism 一致的观测证据。因果验证——如 masking 特定 joint block 的 text attention 并测量 drift 效应——留待后续工作。"
 
 ---
 
@@ -240,137 +250,106 @@ Conflict C = || s - u ||，s 为 skip 特征，u 为 up_block 接收 skip 前的
 ### 6.1 诊断逻辑
 
 ```
-Φ(M) → Peak Region → Latent Correction (f_out = f_recon + λ(f_inv - f_recon))
+Φ(M) → Peak Location → Latent Correction (z ← z + λ(z_inv − z_recon))
 ```
 
-诊断告诉你瓶颈在哪，系统自身冗余使复杂干预不必要。
+### 6.2 证据
 
-### 6.2 重建质量（19 图，50 步 DDIM，SD 1.5）
+**位点依赖性**（§7 的主角，不是应用段）：
+- UNet: random5 ≈ top5（ΔPSNR < 0.3 dB）——skip 连接传播校正信号
+- MM-DiT (FLUX): joint_only = single_only = latent_all（到 1e-12 dB）——残差流线性
+- Transformer (HunyuanDiT): transition-only >> top5（+5.65 vs +2.50 dB）——选层关键
 
-| Method | PSNR | LPIPS | ΔPSNR | Memory |
-|--------|------|-------|-------|--------|
-| DDIM (baseline) | 22.45 ± 3.02 | 0.218 | — | Low |
-| NTI (BLIP) | 19.60 ± 2.80 | 0.312 | −2.86 | Low |
-| EDICT | 22.90 ± 3.15 | 0.195 | +0.45 | 2× |
-| P2P (attn injection) | 25.34 ± 4.01 | 0.087 | +2.88 | ~GB |
-| **Ours** | **25.20 ± 3.88** | **0.094** | **+2.75** | **~MB** |
+**统计等价性**：
+- P2P vs Ours: TOST ≤ 0.2 dB（p1<0.001, p2=0.033）——等价
+- 100-image 独立评估：ΔPSNR = +3.30 dB (d=1.34)
+- Cut A LPIPS/SSIM 三指标均改善（排除模糊化伪影）
 
-- P2P vs Ours: Cohen's d = 0.033（可忽略效应量），行为完全一致
-- 100-image 独立评估：ΔPSNR = +3.30 dB（d = 1.34）——效应在更大样本上更强
-- 编辑 benchmark（121 对）：LPIPS 改善 −85%，确认校正作为编辑流程中的内容锚定
+**编辑中的内容锚定**：
+- λ 悬崖曲线：λ ∈ [0.05, 1.0] 平台区 > 90% LPIPS 改善
+- 过渡窗 [0.01, 0.05] 宽度仅 0.04——L 形前沿, 不存在 sweet spot
+- 编辑 LPIPS −85% (121 pairs, p=4.8e-55)
 
-### 6.3 简单性是诊断的必然推论
-
-- Feature-level injection: ΔPSNR = −0.27 dB（比 baseline 差）
-- DCSC 闭环控制：无增益
-- Per-timestep error-edit separation (Plan B)：证伪——DDIM 误差是轨迹依赖的，不可预计算
-- λ 悬崖曲线：λ ∈ [0.05, 1.0] 平台区 > 90% LPIPS 改善，过渡窗 [0.01, 0.05] 宽度仅 0.04
-
-### 6.4 跨架构校正
-
-| 架构 | ΔPSNR | 关键洞察 |
-|------|-------|---------|
-| SD 1.5 | +2.75 dB | random5 ≈ top5（位置鲁棒） |
-| SDXL | +5.23 dB | 更大 UNet → 更大增益 |
-| HunyuanDiT | +5.65 dB | transition-only >> top5（选层关键） |
-| FLUX | +3.94 dB | latent correction 跨范式有效 |
-
-### 6.5 编辑中的内容锚定
-
-- 校正在 prompt-changed editing 中保持源图结构，但消除编辑方向（CLIP-Dir ≈ 0）
-- λ 悬崖是 L 形前沿——不存在同时达到平台级内容保持与完整编辑保真的 λ
-- 这不是 bug：误差-编辑纠缠是潜空间线性校正方法类的结构约束
+**负结果**（支持"诊断→极简"叙事）：
+- Feature-level injection: −0.27 dB
+- DCSC 闭环控制: 无增益
+- Plan B error-edit separation: 证伪（DDIM 误差是轨迹依赖的）
 
 ---
 
 ## 7. Discussion
 
-### 7.1 贡献总览
-1. Architecture Fingerprint 测量框架与 v2 连续度量
-2. 跨 5 架构 + 1 对照实验的系统证据：漂移组织由 attention 拓扑决定
-3. 因果干预证据：skip conflict 因果链 + 架构实例特异的因果角色
-4. 诊断驱动的校正：与复杂方法等价，成本数百倍降低
-5. 负结果与边界诚实报告：feature injection 无效、闭环无增益、编辑-误差纠缠
+### 7.1 三个审稿人最关心的问题
 
-### 7.2 局限
-- 因果机制分析限于 UNet 架构（skip connection 结构要求），Transformer-only backbone 的机制分析待后续工作
-- 跨 checkpoint 稳定性目前仅验证 SD 系列（SD 1.4→1.5 + RV pending）
-- 跨架构矩阵的 v2 排序需更多架构样本来确认聚类模式
-- λ 悬崖位置目前仅在 SD 1.5 编辑协议上标定
-- MI 估计的统计 power 受限于 Attention 层数（仅 7 层）
-- 未解耦的 confound：CFG scale、VAE latent 维度、文本编码器差异
+**Q1: Architecture Fingerprint 为什么不是一个新名字？**
+> A: Layer-wise drift profile 是局部观测量的拼接。Architecture Fingerprint 是架构级描述符——不同的抽象层级、不同的信息载体、不同的下游用途。§2 给出了完整的必要性论证，包括具体对比例子。
 
-### 7.3 度量审计（Appendix 或 Methods 末段）
-- 早期版本使用含 peak_count 的 4 特征 Euclidean 距离
-- 发现二元峰数分量在复合距离中产生阈值伪影（剖面涟漪越过 prominence 阈值 → 距离跳变 1.0）
-- v2 修复：峰数改为连续峰匹配距离，单独报告；主距离只含连续分量（D_pp + D_mag + D_shape）
-- 本文所有结构距离数值均基于审计后的 v2 度量
-- 原始逐图剖面与特征提取代码随补充材料开源
+**Q2: 机制论断的证据有多强？**
+> A: 本文明确区分四层证据（§1.4）。其中三层有因果干预支持（skip conflict 因果链、高斯噪声扰动剂量、随机初始化实验）。功能子空间错位是**相关性**证据（ρ=0.24），跨模态边界效应是**观测**证据。没有任何结论声称的因果强度超出其证据层级。见 §5 中的逐实验标注。
 
----
+**Q3: 这个概念有多通用？**
+> A: 指纹已在 6 个架构上验证——覆盖 UNet（2 变体）、single-stream Transformer（HunyuanDiT, PixArt-Σ）、dual-stream MM-DiT（FLUX, SD3.5）。在所有验证范围内，指纹保持同架构稳定、跨架构可辨。局限包括：仅验证了 DDIM/Euler 反演协议、仅使用固定 prompt 条件、Transformer-only 架构的机制分析尚不完整。§7.3 列出了未解耦的 confound 和开放问题。
 
-## 8. 配图方案（5 张主图 + 2 表）
+### 7.2 贡献
 
-| Figure | 科学问题 | 数据来源 |
-|--------|---------|---------|
-| Fig.1 | 论文概览：漂移不是噪声，是架构签名 | 概念图（draw.io） |
-| Fig.2 | C1+C2: 五架构漂移剖面 + 结构距离矩阵 | Phase 6 unified + v4 cross-arch |
-| Fig.3 | C3: DiT-S/2 双目标对照 | Phase 9 controlled |
-| Fig.4 | C4 mechanism: SD1.5 vs SDXL skip 干预 | Phase 7c skip intervention |
-| Fig.5 | Application: 诊断→校正→编辑 | Phase 5 + Phase 7 editing |
+1. **Architecture Fingerprint** — 新的分析对象，将反演诊断从逐层统计提升为架构级描述
+2. **系统实验证据** — 6 架构、2 训练目标、跨 checkpoint/LoRA/微调/编码器的分量级不变性
+3. **因果机制** — Skip conflict 因果链（UNet）+ 跨模态边界效应（MM-DiT）+ 功能子空间错位
+4. **诊断驱动的校正** — 与逐图像优化方法等价，成本降低数百倍
+5. **度量审计** — peak_count 阈值 artifact 的发现与修复，v2 连续距离
 
-| Table | 内容 |
-|-------|------|
-| Table 1 | 架构总览（Model, Backbone, Topology, Paradigm, L, Peak layer） |
-| Table 2 | 跨架构 v2 结构距离矩阵（10 对 pairwise） |
+### 7.3 局限与未来工作
+
+- UNet 以外的机制分析限于观测层级
+- 跨架构矩阵目前 6 架构 / 3 拓扑类，每类 n=2
+- 反演协议仅验证 DDIM/Euler
+- Transformer-only 架构的 skip conflict 类比未建立
+- 未解耦 confound：CFG scale, VAE latent 维度, 文本编码器类型
 
 ---
 
-## 9. 实验清单：已完成 vs 待补齐
+## 8. 配图方案
 
-### 已完成（论文可直接写入）
+| Figure | 科学问题 | 类型 |
+|--------|---------|------|
+| Fig.1 | Architecture Fingerprint 概念概览 | 概念图 |
+| Fig.2 | C1+C2: 边界谱系 + v2 跨架构矩阵 | 数据图 |
+| Fig.3 | C3: DiT-S/2 双目标结晶曲线 | 数据图 |
+| Fig.4 | C4 mechanism: SD1.5 vs SDXL skip 干预对比 | 数据图 |
+| Fig.5 | Application: 诊断→校正→编辑 | 数据图 |
 
-| 实验 | 解锁 | 状态 |
-|------|------|------|
-| Phase 1: SD 1.5 漂移动态诊断 | 基线 | ✅ |
-| Phase 4/6: 五架构漂移指纹统一量化 | C2 | ✅ |
-| Phase 9: DiT-S/2 双目标对照 | C3 | ✅ |
-| Phase 7c: Skip 因果干预 (Cut A/B, Noise A, dose-response) | C4 | ✅ |
-| Phase 7c: SDXL 跨架构因果验证 | C4 | ✅ |
-| Phase 5: 19+100 图 SOTA 校正对比 | Application | ✅ |
-| Phase 7: 121 对编辑 benchmark | Application | ✅ |
-| Phase 4 info theory: 因果消融 + MI | Mechanism | ✅ |
-| Phase 6 FLUX: 跨范式校正 | Application | ✅ |
-| Precision ablation (fp16 vs bf16) | Methodology | ✅ |
-| v4 权重扰动剂量曲线 | C1 | ✅ |
-| ΔW SD1.4↔1.5 测量 + drift × ΔW Spearman | C1+Mechanism | ✅ |
-| SD 1.4 真实指纹（C1 闭合） | C1 | ✅ |
-| 跨架构矩阵 v2 重算 | C2 | ✅ |
-| 预注册冻结 | Methodology | ✅ |
+| Table 1 | 架构总览 (Model, Backbone, Topology, Paradigm, L, Peak) |
+| Table 2 | v2 跨架构 pairwise 结构距离矩阵 |
+
+---
+
+## 9. 实验状态
+
+### 已完成
+
+| 实验 | 解锁 | 证据层级 |
+|------|------|---------|
+| 六架构漂移指纹统一量化 | C2 | Observation |
+| v4 高斯扰动剂量曲线 | C1 | Intervention |
+| SD 1.4 / RV / LCM / RandText 指纹 | C1 | Observation |
+| ΔW 测量 + drift×ΔW Spearman | C1, Mechanism | Correlation |
+| DiT-S/2 eps+flow 结晶曲线 | C3 | Observation (trajectory) |
+| 随机初始化 UNet | C1 | Intervention |
+| v2 跨架构矩阵 + PixArt | C2 | Observation + Falsification |
+| Skip 因果干预 (Cut A/B, Noise A, dose) | C4 | Intervention |
+| SDXL 跨架构因果验证 | C4 | Observation |
+| 最近质心识别盲测 | C2 | Prediction |
+| MMDiT joint→single 边界分析 | Mechanism | Observation |
+| TOST/BH/FDR 统计包 | 统计 | — |
+| 度量审计 (peak_count→v2) | 方法 | — |
 
 ### 待补齐
 
-| 实验 | 优先级 | 解锁 |
+| 实验 | 优先级 | 阻塞 |
 |------|--------|------|
-| Realistic Vision 指纹 | P1 | C1 宽度 |
-| P0a 统计修正（TOST, BH, MI shuffle） | P0a | 统计严谨性 |
-| 边缘交叉图（mean ΔW vs mean drift by layer type） | P0a | Mechanism 主证据 |
-| 采样器 swap（固定 checkpoint 换采样器） | P1 | C3 |
-| PixArt-Σ + Qwen-Image 接入 + 指纹 | P1 | C2 2×2 复现 |
-| PERMANOVA 方差分解 | P1 | C2 定量 |
-| dose-matched 随机层切断 | P2 | 风险 4 |
-| 冲突指数盲测 | P2 | C4 stretch |
-| D_s 记号全文替换 + "训练目标" 措辞替换 | P0a | 术语 |
-| UNet 输出范数曲线 | low | Mechanism 补充 |
+| PixArt-Σ + PERMANOVA 方差分解 | P1 | 数据已齐, 分析待做 |
+| HunyuanDiT 组件拆分 (attention/MLP/残差) | P2 | pos_embed 尺寸依赖 |
+| MI shuffle 基线 | P2 | 需 Phase 4 特征重提取 |
+| 写作 | P0 | 现在开始 |
 
-
-## 10. 附录计划（5-8 项）
-
-- A. Normalization ablation（四种归一化方案的排序稳定性）
-- B. 跨 prompt 泛化（100 prompts）
-- C. 编辑 benchmark 完整结果（121 对逐类分布）
-- D. 噪声底 bootstrap 分布与 N-scaling
-- E. MI 估计：shuffle 基线 + 收敛曲线
-- F. 度量审计：v1→v2 迁移的对比表（含旧 peak_count 伪影的示例）
-- G. 预注册哈希承诺与冲突指数原文
-- H. SDXL multi-position skip cut（未来工作）
+---
