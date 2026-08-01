@@ -138,38 +138,48 @@ def fig2_fingerprint():
             v = np.interp(x_new, x_old, v)
         unified[name] = v
 
-    # Structural features (NO interpolation — raw layer counts)
-    def extract_features(vals):
-        """Extract 4D structural feature vector from raw drift values."""
-        vn = vals / (vals.max() + 1e-8)
-        n = len(vn)
-        peak_idx = np.argmax(vn)
-        peak_pos = peak_idx / max(1, n - 1)
-
-        # Count significant local maxima (>0.3 normalized)
-        peaks = sum(1 for i in range(1, n - 1)
-                    if vn[i] > vn[i - 1] and vn[i] > vn[i + 1] and vn[i] > 0.3)
-        n_peaks = min(peaks, 9)  # cap for display
-
-        # Drift concentration: fraction of layers above 0.5
-        concentration = (vn > 0.5).sum() / n
-
-        # Spread: normalized span of above-noise (>0.1) layers
-        above = np.where(vn > 0.1)[0]
-        spread = (above[-1] - above[0]) / n if len(above) > 0 else 0.0
-
-        return np.array([peak_pos, n_peaks / 10.0, concentration, spread])
+    # v2 structural features (continuous only, no peak_count)
+    # Load from pre-computed v2 matrix
+    try:
+        with open("outputs/p0b_cross_checkpoint/cross_arch_v2_matrix.json") as f:
+            v2_data = json.load(f)
+        v2_features = v2_data["features"]
+        v2_pairwise = v2_data["pairwise"]
+    except Exception:
+        # Fallback: recompute v2 features
+        def extract_features(vals):
+            vn = vals / (vals.max() + 1e-8)
+            n = len(vn)
+            peak_pos = np.argmax(vn) / max(1, n - 1)
+            k = max(1, int(np.ceil(0.2 * n)))
+            top = np.argsort(vn)[-k:]
+            concentration = np.sum(vn[top]) / np.sum(vn)
+            # Gini spread
+            sv = np.sort(vn)
+            gini = (2 * np.sum(np.arange(1, n + 1) * sv) - (n + 1) * np.sum(sv)) / (n * np.sum(sv) + 1e-8)
+            return np.array([peak_pos, concentration, gini])
+        v2_features = {name: extract_features(profiles[name]) for name in profiles}
+        v2_pairwise = None
 
     names_list = list(profiles.keys())
     n = len(names_list)
-    feat_vecs = {name: extract_features(profiles[name]) for name in names_list}
 
-    # Structural distance matrix (Euclidean, 0 = identical)
-    dist = np.zeros((n, n))
-    for i in range(n):
-        for j in range(n):
-            dist[i, j] = np.linalg.norm(
-                feat_vecs[names_list[i]] - feat_vecs[names_list[j]])
+    # Use pre-computed v2 distances when available, else recompute
+    if v2_pairwise:
+        dist = np.zeros((n, n))
+        name_to_idx = {name: i for i, name in enumerate(names_list)}
+        for pair_key, dd in v2_pairwise.items():
+            a, b = pair_key.split("-")
+            if a in name_to_idx and b in name_to_idx:
+                d_val = dd["D_total"]
+                dist[name_to_idx[a], name_to_idx[b]] = d_val
+                dist[name_to_idx[b], name_to_idx[a]] = d_val
+    else:
+        dist = np.zeros((n, n))
+        for i in range(n):
+            for j in range(n):
+                dist[i, j] = np.linalg.norm(
+                    v2_features[names_list[i]] - v2_features[names_list[j]])
 
     # ---- Figure layout ----
     fig = plt.figure(figsize=(20, 8))
