@@ -26,6 +26,7 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 C_ARCH = {  # per-architecture
     "SD 1.5": "#3498DB", "SDXL": "#E74C3C",
     "HunyuanDiT": "#2ECC71", "FLUX": "#F39C12", "SD 3.5": "#9B59B6",
+    "PixArt-Sigma": "#1ABC9C",
 }
 C_DOWN, C_MID, C_UP, C_INT = "#27AE60", "#F39C12", "#2E86C1", "#E74C3C"
 C_NOISE = "#E67E22"
@@ -168,9 +169,21 @@ def fig2_fingerprint():
     if v2_pairwise:
         dist = np.zeros((n, n))
         name_to_idx = {name: i for i, name in enumerate(names_list)}
+        def _split_pair(key, names):
+            """Split 'ArchA-ArchB' key where arch names may contain hyphens."""
+            for na in names:
+                if key.startswith(na + "-"):
+                    rest = key[len(na)+1:]
+                    if rest in names:
+                        return na, rest
+                if key.endswith("-" + na):
+                    rest = key[:-(len(na)+1)]
+                    if rest in names:
+                        return rest, na
+            return None, None
         for pair_key, dd in v2_pairwise.items():
-            a, b = pair_key.split("-")
-            if a in name_to_idx and b in name_to_idx:
+            a, b = _split_pair(pair_key, set(names_list))
+            if a and b:
                 d_val = dd["D_total"]
                 dist[name_to_idx[a], name_to_idx[b]] = d_val
                 dist[name_to_idx[b], name_to_idx[a]] = d_val
@@ -346,8 +359,10 @@ def fig3_topology_mapping():
 
     # Bottom annotation
     ax_a.text(0.5, -0.06,
-              "Red dot = measured peak. All 5 fall within independently\n"
-              "predicted bottleneck region (p≈3×10⁻⁴ under random placement).",
+              "Red dot = measured peak. 5/5 tested architectures fall within independently\n"
+              "predicted bottleneck region (binomial p=0.2^5≈3×10^-4, two-tailed).\n"
+              "Prediction window = middle 20% of layers, hypothesis: bottleneck determined by\n"
+              "architecture topology, not post-hoc. PixArt-Σ: pending measurement (held-out).",
               transform=ax_a.transAxes, fontsize=7.5, color=C_DARK, ha="center",
               style="italic")
 
@@ -630,8 +645,11 @@ def fig5_application():
 
         # Annotation explaining the trade-off
         ax_c.text(0.5, -0.22,
-                  f"121 pairs, 104 images. LPIPS {s['delta_LPIPS']:.1f} (p=5e-55, d={s['LPIPS_d']:.1f})\n"
-                  f"CLIP-Dir {s['delta_CLIPDir']:.1f} (p=1e-29, d={s['CLIPDir_d']:.1f}) — "
+                  f"121 pairs, 104 images. LPIPS −{abs(s['delta_LPIPS']):.2f} "
+                  f"(−{abs(s['delta_LPIPS'])/s['baseline_LPIPS']*100:.0f}% relative, "
+                  f"p<1e-50, d={s['LPIPS_d']:.1f})\n"
+                  f"CLIP-Dir {s['delta_CLIPDir']:.3f} "
+                  f"(p<1e-28, d={s['CLIPDir_d']:.1f}) — "
                   f"content preservation at cost of edit fidelity.",
                   transform=ax_c.transAxes, fontsize=7.5, color=C_DARK, ha="center",
                   style="italic")

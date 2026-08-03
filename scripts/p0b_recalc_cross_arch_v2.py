@@ -6,7 +6,7 @@ D_pp = |peak_position_a - peak_position_b|
 D_mag = L2(concentration, spread)
 D_shape NOT computed (Spearman requires same-length profiles)
 
-Architectures: SD 1.5 (38L), SDXL (28L), HunyuanDiT (40L), FLUX (57L), SD 3.5 (24L)
+Architectures: SD 1.5 (38L), SDXL (28L), HunyuanDiT (40L), FLUX (57L), SD 3.5 (24L), PixArt-Σ (28L)
 """
 
 import json, numpy as np
@@ -101,11 +101,32 @@ for ln in sorted(d35["aggregated"].keys(), key=lambda x: x):
     sd35_profile.append(d35["aggregated"][ln]["mean"])
 archs["SD3.5"] = {"profile": np.array(sd35_profile), "layers": sd35_layers, "L": len(sd35_profile)}
 
-# Extract v2 features
+# PixArt-Σ — use pre-computed features (raw profile not yet saved for recalculation)
+with open("outputs/p0b_cross_checkpoint/pixart_fingerprint.json") as f:
+    dpx = json.load(f)
+pf = dpx["features"]
+archs["PixArt-Sigma"] = {
+    "profile": np.zeros(dpx["n_blocks"]),  # placeholder
+    "layers": [f"block_{i}" for i in range(dpx["n_blocks"])],
+    "L": dpx["n_blocks"],
+    "_precomputed": {
+        "peak_position": pf["peak_position"],
+        "concentration": pf["concentration"],
+        "spread": pf["spread"],
+        "n_peaks": int(pf["n_peaks"]),
+        "top_prominence": None,
+        "L": dpx["n_blocks"],
+        "peak_layer": f"block_{int(pf['peak_position']*dpx['n_blocks'])}"
+    }
+}
 features = {}
 for name, arch in archs.items():
-    f = extract_v2(arch["profile"], arch["layers"])
-    features[name] = f
+    if "_precomputed" in arch:
+        f = arch["_precomputed"]
+        features[name] = f
+    else:
+        f = extract_v2(arch["profile"], arch["layers"])
+        features[name] = f
     print(f"{name:6s}: L={f['L']:3d}  pp={f['peak_position']:.4f}  conc={f['concentration']:.4f}  "
           f"sp={f['spread']:.4f}  n_peaks={f['n_peaks']}  peak={f['peak_layer']}")
 

@@ -44,7 +44,7 @@
 - **不携带架构信息**：profile 本身是数字序列，不含拓扑语义（瓶颈在哪、skip 连接如何传播、跨模态交互边界在何处）
 - **不能支撑诊断**：从 profile 只能知道"哪层漂移大"，不能知道"这个结构组件是冲突源还是信息通路"
 
-一个具体的例子：SD 1.5 和 SDXL 的逐层 profile 形状完全不同——但它们共享相同的 UNet backbone family，其漂移组织在抽象特征空间中落入同一聚类。Profile 无法揭示的东西，需要一个新的分析对象。
+一个具体的例子：PixArt-Σ 和 SDXL 均采用不同的 backbone 设计（DiT with cross-attention vs UNet），层数完全相同（28 层），逐层 profile 可比性受 VAE 维度、量级差异等因素干扰——但它们在 Architecture Fingerprint 空间中峰位重合（D_pp=0.000，D_total=0.142），是全部 10 对跨架构比较中最近的一对。相比之下，PixArt-Σ 与同属 single-stream Transformer 的 HunyuanDiT 距离 0.468（3.3× 更远）。Profile 无法揭示这种结构组织层面的亲缘关系。
 
 ### 1.3 Architecture Fingerprint
 
@@ -78,9 +78,9 @@
 
 三条文献线，划清边界：
 
-- **反演误差与轨迹偏差**：RF-Inversion, RF-Solver, FlowEdit 等讨论 inversion trajectory deviation——我们的贡献不是"发现漂移"，而是"漂移的组织结构是架构属性"。
-- **架构内部表示分析**：Diffusion Hyperfeatures, h-space/Asyrp, FeatureInject 等分析前向生成中的语义表示——不涉及反演-重建不一致性。
-- **架构差异与特征行为**：FireFlow, DiTCtrl 等已知 MMDiT 不同层段对编辑敏感度不同——没有将其系统化为可测量的架构签名。
+- **反演误差与轨迹偏差**：DDIM inversion~\citep{song2021ddim} 的反演-重建不一致性已被多项工作关注。NTI~\citep{mokady2023nti} 通过空文本优化改善重建，EDICT~\citep{wallace2023edict} 提出耦合变换实现精确反演，P2P~\citep{hertz2023p2p} 注入交叉注意力保持内容。近期，RF-Inversion~\citep{hong2024rfinversion}、RF-Solver~\citep{wu2024rfsolver}、FlowEdit~\citep{kulikov2024flowedit}、FireFlow~\citep{zhong2024fireflow} 和 DiTCtrl~\citep{chen2024ditctrl} 分别针对 rectified flow 和 DiT 架构优化轨迹偏差。RLI~\citep{rout2024rli} 独立发现了与我们相同的校正公式。上述工作的一致前提是"漂移需要被抑制"——我们的贡献不是发现漂移，而是将漂移的组织结构重新定义为架构的可测量属性。
+- **架构内部表示分析**：Diffusion Hyperfeatures~\citep{luo2024diffusionhyperfeatures}、h-space~\citep{kwon2023hspace}、Asyrp~\citep{haas2023asyrp}、FeatureInject~\citep{basu2024featureinject} 等分析前向生成中的语义表示——不涉及反演-重建不一致性。Splice~\citep{tumanyan2023splice} 分析了 DiT 内部表示但不涉及漂移的可比性。
+- **架构差异与特征行为**：DiTCtrl~\citep{chen2024ditctrl} 已知 MMDiT 不同层段对编辑敏感度不同——没有将其系统化为可测量的架构签名。从更广的视角看，机械可解释性工作如 Circuits~\citep{olah2020zoom,elhage2021transformer} 和 ACDC~\citep{conmy2023causal} 提供了跨架构分析特征行为的先例，但均未涉及扩散反演中的特征漂移组织。
 
 ---
 
@@ -126,18 +126,22 @@ SD1.4(0.011) < LCM(0.021) < RandText(0.034) < RV(0.043) ‖ inter-arch(0.092) �
 
 **指纹相似性由跨模态交互机制决定，而非简单的 attention 拓扑二分。**
 
-**v2 pairwise matrix** (D_s = sqrt(D_pp² + D_mag²)):
+**v2 pairwise matrix** (D_s = sqrt(D_pp² + D_mag²), 104 images):
 
-| Pair | D_total | 注 |
-|------|---------|-----|
-| FLUX-SD3.5 | 0.092 | 同 MM-DiT 最近 |
-| DiT-SDXL | 0.188 | |
-| SD1.5-SDXL | 0.336 | 同 UNet |
-| PixArt-SD3.5 | 0.149 | PixArt 聚类到 MM-DiT |
-| DiT-PixArt | **0.571** | 同 single-stream, 却是最远对之一 |
-| DiT-FLUX | 0.618 | 最远 |
+| Pair | D_total | D_pp | D_mag | 注 |
+|------|---------|------|-------|-----|
+| PixArt-Σ–SDXL | 0.142 | 0.000 | 0.142 | 峰位完全相同 |
+| SD1.5–SDXL | 0.207 | 0.201 | 0.047 | 同 UNet |
+| FLUX–SD1.5 | 0.264 | 0.219 | 0.148 | |
+| PixArt-Σ–SD1.5 | 0.275 | 0.201 | 0.188 | |
+| HunyuanDiT–SD1.5 | 0.308 | 0.263 | 0.160 | |
+| FLUX–HunyuanDiT | 0.310 | 0.044 | 0.306 | |
+| HunyuanDiT–PixArt-Σ | 0.468 | 0.464 | 0.059 | 同 single-stream，远 |
+| FLUX–SDXL | 0.463 | 0.420 | 0.195 | |
+| HunyuanDiT–SDXL | 0.478 | 0.464 | 0.114 | |
+| FLUX–PixArt-Σ | **0.538** | 0.420 | 0.335 | 最远 |
 
-PixArt-Σ 和 HunyuanDiT 同属 "single-stream Transformer with cross-attention"，但它们的指纹距离（0.571）远超 PixArt vs FLUX（0.234，不同拓扑类）。原因是 PixArt 与 SD3/FLUX 共享跨模态交互的具体实现（T5 text encoder + split processing），而与 HunyuanDiT 的 cross-attention 机制不同。**跨模态交互机制的具体实现，而非 attention 是 single 还是 dual stream，决定了指纹的聚类方式。**
+PixArt-Σ 与 HunyuanDiT 同属 "single-stream Transformer with cross-attention"（D_total=0.468，D_pp=0.464），而 PixArt-Σ 与 SDXL 的距离仅 0.142，且峰位完全相同（D_pp=0.000）。值得注意的是，PixArt-Σ 和 SDXL 共享 VAE 架构（SDXL VAE），这一 confound 尚未与跨模态交互机制完全解耦——正文需明确讨论。HunyuanDiT-FLUX 同为 cross-modal-rich 架构，D_pp 仅 0.044，但 D_mag=0.306 使总距离处于中档——说明度量分量（浓度/展宽）携带了独立于峰位的信息。
 
 最近质心分类盲测：RV、LCM、RandText 均正确归入 UNet 质心；PixArt 未能归入同拓扑的 DiT 簇。
 

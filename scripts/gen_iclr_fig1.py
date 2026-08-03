@@ -2,8 +2,9 @@
 """Figure 1 (teaser): Architecture Fingerprint of Feature Drift — slim three-act.
 Designed at 7.0 in wide; scaled to 5.5 in column -> fonts x0.786 (min 9pt -> 7pt).
 
-v2: Fixed font overlaps — increased figure height 3.0→3.5, expanded profile
-    vertical span, reduced icon/curve heights, tightened fonts.
+v3: Switched stats from v1 metric (same-family d=0.249, diff-topology d=1.077,
+    LOOCV r=0.999995) to v2 metric (D_total continuous, no peak_count).
+    v2 scale: intra-arch <= 0.043, inter-arch >= 0.092, noise floor = 0.007.
 """
 import numpy as np
 import matplotlib
@@ -153,9 +154,9 @@ for i, (name, topo, col, x, y, layerlab, lpos) in enumerate(PROFILES):
 # Stats below profiles
 stat_y0 = PROF_BOT - 0.035
 stat_dy = 0.045
-stats = [("same-family  d = 0.249", 9, INK),
-         ("diff-topology  d = 1.077", 9, INK),
-         ("LOOCV  r = 0.999995", 8, INK)]
+stats = [("intra-arch  D_total ≤ 0.043", 9, INK),
+         ("inter-arch  D_total ≥ 0.092", 9, INK),
+         ("noise floor  = 0.007  (B=100)", 8, INK)]
 for j, (t, fs, fc) in enumerate(stats):
     fig.text(L, stat_y0 - j * stat_dy, t, fontsize=fs, color=fc,
              ha="left", va="center")
@@ -274,7 +275,7 @@ fig.text(0.840, 0.068, "edit: either/or, not how-much", fontsize=8.5,
 
 # ---- save ----
 import os
-out_dir = "/tmp/fig1"
+out_dir = "outputs/figures"
 os.makedirs(out_dir, exist_ok=True)
 fig.savefig(f"{out_dir}/fig1_teaser.png", dpi=300, facecolor="white")
 fig.savefig(f"{out_dir}/fig1_teaser.pdf", facecolor="white")
