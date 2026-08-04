@@ -108,6 +108,33 @@ class FeatureExtractor:
         self.handles.clear()
         self.features.clear()
 
+def _unet_layer_sort_key(name):
+    """Canonical UNet layer ordering: section → block_idx → resnet before attention → sub_idx.
+    Matches physical forward pass: within each block, residual (resnets) comes before
+    spatial self/cross-attention (attentions). Ensures peak_position is comparable across
+    different discover_unet_targets() implementations."""
+    parts = name.split(".")
+    section_order = {"down_blocks": 0, "mid_block": 1, "up_blocks": 2}
+    section = parts[0]
+    sec = section_order.get(section, 99)
+    # Find block index and type ordering
+    blk_idx = 0
+    type_ord = 0  # 0=resnets, 1=attentions
+    sub_idx = 0
+    for i, p in enumerate(parts):
+        if p in ("down_blocks", "mid_block", "up_blocks"):
+            if i + 1 < len(parts) and parts[i+1].isdigit():
+                blk_idx = int(parts[i+1])
+        elif p == "resnets":
+            type_ord = 0
+            if i + 1 < len(parts) and parts[i+1].isdigit():
+                sub_idx = int(parts[i+1])
+        elif p == "attentions":
+            type_ord = 1
+            if i + 1 < len(parts) and parts[i+1].isdigit():
+                sub_idx = int(parts[i+1])
+    return (sec, blk_idx, type_ord, sub_idx)
+
 def discover_unet_targets(unet):
     """Discover UNet hook targets: resnets (last numeric suffix) and transformer_blocks[0]."""
     targets = []
@@ -121,7 +148,7 @@ def discover_unet_targets(unet):
             idx = parts.index("transformer_blocks")
             if len(parts) == idx + 2 and parts[-1] == "0":
                 targets.append(n)
-    return sorted(targets)
+    return sorted(targets, key=_unet_layer_sort_key)
 
 def discover_transformer_targets(model, prefix="", block_attr="transformer_blocks"):
     """Discover transformer block hook targets."""
