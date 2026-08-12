@@ -1,4 +1,4 @@
-# Architecture Fingerprint: 严格定义与贡献层次 (v3.4)
+# Architecture Fingerprint: 严格定义与贡献层次 (v3.5)
 
 > ICLR 2027 投稿用。
 > v2 → v3 核心修正：(1)"Fingerprint"明确定位为 measured profile 而非 intrinsic property；
@@ -37,6 +37,22 @@
 > shuffle 基线与收敛曲线；(23)新增 PERMANOVA 方差分解规范(§10)与冲突指数预注册
 > 文档(§11)；(24)P2P 等价限于重建场景，编辑场景改为"内容锚定(content anchor)"框架；
 > (25)术语排雷：drift / fingerprint / D_s 三词在脚注中与相邻领域歧义主动切割。
+>
+> v3.4 → v3.5 (2026-08-12 协议审计 + 层序 canonical 化)：(26)发现历史数据混用三种
+> 漂移测量协议——P-multi(多步均值, Definition 1 合规)、P-t0(低噪端单步)、
+> P-tT(高噪端单步)——统一收敛到 P-multi 为 canonical 主协议，历史协议数据转入
+> 稳健性附录（P-t0 下三带间距 1.2× vs P-multi 下 ~3×，协议选择依据预先定义与
+> 估计量性质，不跟随结果）；(27)层序 canonical 化：发现 UNet 块内字母序≠执行序
+> （attentions 排在 resnets 前）与字典序 bug（block_10 排在 block_2 前），建立
+> `layer_order.py` 共享模块 + 单元测试 + layer_list_hash 审计字段；(28)峰型三分类：
+> 内层局域峰 / 近末层已验证峰（SD3.5 block_22，104 图复核 d=2.42、104/104 一致）/
+> 末层删失峰†（SDXL、PixArt-Σ 0.964，hook 边界截断）——删失峰对的 D_pp 需双场景
+> 敏感性表注释；(29)FLUX 峰位修正：自然排序修复后 peak=s2（joint→single 边界带
+> 第 3 块），"跨模态边界"叙事从次峰升级为全局峰；(30)Finding 2 重构：分量分层——
+> 峰位编码实例身份，度量分量编码谱系身份；D_mag 为主轴（免疫删失与协议选择），
+> D_pp 降级为带注释的辅助证据；(31)机制聚类假说正式否定（H-DiT–PixArt 同机制
+> D_mag=0.418）；(32)全量重测进行中：6 架构 + Band 1 四变体统一到 P-multi·104 图，
+> 完成前 Finding 2 全部数字保持占位状态。
 
 ---
 
@@ -481,8 +497,13 @@ of invariance across all conditions.
 Φ(M) = Φ(M; D, P, norm)
 ```
 
-- D: evaluation image set (fixed to coco_val, 19 images)
-- P: inversion protocol (DDIM, T=50, empty prompt by default)
+- D: evaluation image set (coco_val100, 104 images — canonical; 19-image
+  historical values retained in audit appendix)
+- P: inversion protocol (DDIM, T=50, empty prompt by default; **canonical
+  drift protocol = P-multi**: K follows the relative rule {first 3, mid 3,
+  last 3} of the scheduler step grid, reference features from DDPM-forward
+  noise at matched timestep. Historical single-step protocols P-t0/P-tT
+  documented in PROTOCOL_MANIFEST.md, retained as robustness appendix)
 - norm: min-max normalization to [0,1] (ablation of normalization choices
   provided in Appendix)
 
@@ -513,6 +534,30 @@ structure, and (c) cross-modal interaction boundaries (§3.4, Table 1):
 The prediction window size relative to total layers (k/L) provides a
 chance-level baseline: if the prediction window covers a fraction k/L of all
 layers, l_peak falls within it with probability k/L under random placement.
+
+**Peak type classification (v3.5, §3.5 of outline):** peaks fall into three
+types with distinct evidential status—
+
+1. **Interior localized peak**: maximum strictly inside the hooked range
+   (SD1.5 0.684, H-DiT 0.500, FLUX 0.368), full peak shape observable;
+2. **Verified near-terminal peak**: maximum near the end with observed
+   post-peak falloff (SD3.5 block_22 with block_23 −47%, 104/104 images,
+   paired t=36.9, Cohen's d=2.42);
+3. **Terminal censored peak†**: maximum at the last hooked layer, post-peak
+   falloff unobservable (SDXL, PixArt-Σ at 0.964). Not an artifact—stable
+   under protocol×image-set 2×2 (96.2% per-image agreement for SDXL)—but a
+   right-censored measurement: D_pp values involving censored peaks require
+   dual-scenario sensitivity annotation (as-measured vs strongest interior
+   candidate, Appendix A4).
+
+**Bottleneck-window prediction refinement (v3.5):** the prediction window
+must be defined per-instance from structural facts, not per-category priors.
+FLUX's peak at s2 (joint→single boundary region, not the boundary block
+itself) and SD3.5's peak at block_22 (no structural boundary in uniform
+MMDiT, bottleneck near output) show that the peak tracks the *instance's
+actual structural boundary*, and the boundary window table in §4.1 is
+re-derived per architecture (Appendix: per-architecture windows +
+structural justification).
 Across the 5 architectures, mean k/L ≈ 0.20 (range: 0.17–0.25), giving a
 binomial probability of 5/5 containment under random placement of
 p ≈ 3×10⁻⁴.
@@ -756,12 +801,18 @@ artificially close.
 
 **Limitation of the above evidence**: architecture and training paradigm are
 naturally confounded in all publicly available models (UNet = DDPM-trained,
-MM-DiT = Flow-Matching-trained). The inference that "paradigm is not the
-determining factor" is indirect — it rests on the observation that
-FLUX vs SD 1.5 (d=0.637, different backbone + paradigm) and HunyuanDiT vs
-SD 1.5 (d=0.624, different backbone, same paradigm) are at similar distances.
-This is a weak argument: HunyuanDiT and FLUX differ in attention topology
-(single vs dual stream), so the distance could be driven by either factor.
+dual-stream DiT = Flow-Matching-trained). Note that MM-DiT is an architecture
+category (joint dual-stream attention), while flow matching is a training
+objective; the two are highly co-occurrent in current open-source models but
+conceptually independent. The DiT-S/2 controlled experiment (F3: same
+architecture, epsilon vs flow peaks converge to identical position) was
+designed specifically to disentangle these two factors. The inference that
+"paradigm is not the determining factor" is indirect — it rests on the
+observation that FLUX vs SD 1.5 (d=0.637, different backbone + paradigm) and
+HunyuanDiT vs SD 1.5 (d=0.624, different backbone, same paradigm) are at
+similar distances. This is a weak argument: HunyuanDiT and FLUX differ in
+attention topology (single vs dual stream), so the distance could be driven
+by either factor.
 
 *Evidence (causal, controlled paradigm isolation):* To disentangle architecture
 from training paradigm, we train the identical DiT-S/2 architecture (~40M

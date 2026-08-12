@@ -105,7 +105,7 @@
 
 **Φ(M) 呈现分量级不变性：峰位在 checkpoint 谱系内严格不变，度量分量条件依赖。**
 
-**证据**：
+**证据**（历史值，P-tT 单步协议；P-multi 多步协议重测中，见 §3.6 协议审计）：
 
 | 模型变体 | D_s vs SD 1.5 | D_pp | 类型 |
 |----------|-------------|------|------|
@@ -116,32 +116,34 @@
 
 - v4 高斯扰动剂量曲线（Intervention）：ε ≤ 1e-4 D_total < 噪声底，D_pp 全程 0.000
 - ΔW 测量：真实 checkpoint ΔW (0.14–0.21) 超出高斯稳定区三个数量级——L2 权重量级不预测指纹距离
+- P-multi 重测预注册：预期 D_pp 仍全 0（峰位跟随 SD1.5 P-multi 峰 0.684）；D_mag 移动方向待观测——若谱系带在 P-multi 下仍 ≤0.04 且带序保持（intra < lineage < cross），C1 主张在两个协议维度上均稳
 
-**边界谱系**：
+**边界谱系**（历史 P-tT 值，P-multi 重测后更新）：
 ```
 SD1.4(0.011) < LCM(0.021) < RandText(0.034) < RV(0.043) ‖ inter-arch(0.092) ‖ DiT-FLUX(0.618) ‖ random(0.699)
 ```
 
-### 3.3 Finding 2: Clustering by Cross-Modal Mechanism
+### 3.3 Finding 2: Two Components, Two Levels of Identity
 
-**指纹相似性由跨模态交互机制决定，而非简单的 attention 拓扑二分。**
+**指纹的两个分量在两个层级上编码架构身份——拓扑分量（峰位）编码实例身份，度量分量（concentration, spread）编码谱系身份。**
 
-**v2 pairwise matrix** (D_s = sqrt(D_pp² + D_mag²), 104 images):
+**D_mag 主轴（对峰位删失与协议选择免疫）**：
 
-| Pair | D_total | D_pp | D_mag | 注 |
-|------|---------|------|-------|-----|
-| PixArt-Σ–SDXL | 0.142 | 0.000 | 0.142 | 峰位完全相同 |
-| SD1.5–SDXL | 0.207 | 0.201 | 0.047 | 同 UNet |
-| FLUX–SD1.5 | 0.264 | 0.219 | 0.148 | |
-| PixArt-Σ–SD1.5 | 0.275 | 0.201 | 0.188 | |
-| HunyuanDiT–SD1.5 | 0.308 | 0.263 | 0.160 | |
-| FLUX–HunyuanDiT | 0.310 | 0.044 | 0.306 | |
-| HunyuanDiT–PixArt-Σ | 0.468 | 0.464 | 0.059 | 同 single-stream，远 |
-| FLUX–SDXL | 0.463 | 0.420 | 0.195 | |
-| HunyuanDiT–SDXL | 0.478 | 0.464 | 0.114 | |
-| FLUX–PixArt-Σ | **0.538** | 0.420 | 0.335 | 最远 |
+| 带 | 对象 | D_mag |
+|----|------|-------|
+| Band 1 谱系内 | SD1.5 变体 (RV/SD1.4/LCM/RandText) | 0.021–0.034 (P-tT 历史值, P-multi 重测中) |
+| Band 2 同谱系跨模型 | SD1.5–SDXL、FLUX–SD3.5 | 0.031 / 0.044 (P-multi 重测中) |
+| Band 3 跨谱系 | 其余 11 对 | ≥0.112 (P-multi 重测中) |
 
-PixArt-Σ 与 HunyuanDiT 同属 "single-stream Transformer with cross-attention"（D_total=0.468，D_pp=0.464），而 PixArt-Σ 与 SDXL 的距离仅 0.142，且峰位完全相同（D_pp=0.000）。值得注意的是，PixArt-Σ 和 SDXL 共享 VAE 架构（SDXL VAE），这一 confound 尚未与跨模态交互机制完全解耦——正文需明确讨论。HunyuanDiT-FLUX 同为 cross-modal-rich 架构，D_pp 仅 0.044，但 D_mag=0.306 使总距离处于中档——说明度量分量（浓度/展宽）携带了独立于峰位的信息。
+带间距（Band 2 顶 → Band 3 底）：~2.9×（占位值，等 P-multi 全量重算后落定）。协议敏感性：P-t0 单步协议下带间距收窄至 ~1.2×——多步均值（P-multi）稀释了轨迹分叉的通用端点分量，凸显架构特异的量级组织。协议选择依据估计量性质而非结果（见 §3.6）。
+
+**D_pp 轴（带删失注释的辅助证据）**：
+
+- 峰型三分类：内层局域峰（SD1.5 0.684, H-DiT 0.500, FLUX 0.368††）/ 近末层已验证峰（SD3.5 0.917，block_23 回落 47%，104/104 图，d=2.42）/ 末层删失峰†（SDXL、PixArt-Σ 0.964，hook 范围截断，峰后回落不可观测）
+- 删失峰对的 D_pp 为测量边界产物，非架构相似性证据——双场景矩阵（as-measured vs 最强内层候选）见附录
+- D_pp 在两个方向上都不尊重谱系边界：同谱系可远至 0.55（FLUX–SD3.5），跨谱系可近至 0.05（受删失状态调制）
+
+**机制聚类假说正式否定**：H-DiT–PixArt 同属 cross-attention DiT 类别，D_mag 高达 0.418——度量分量追踪的是真实设计谱系，不是分类学标签。
 
 最近质心分类盲测：RV、LCM、RandText 均正确归入 UNet 质心；PixArt 未能归入同拓扑的 DiT 簇。
 
@@ -152,6 +154,47 @@ PixArt-Σ 与 HunyuanDiT 同属 "single-stream Transformer with cross-attention"
 - DiT-S/2 eps vs flow 对照（Intervention）：峰位同归 block 11，浓度差 0.011
 - 结晶曲线（Observation）：eps 在 10k 步锁定峰位，flow 在 30k 步锁定。最终稳态一致，收敛速度范式依赖
 - 采样器 swap（Intervention）：确定性 ODE（DPM++, Euler, Euler a）保持峰位；随机 DDIM (η=1) 移位
+
+### 3.5 Peak Stability Diagnostics (v3 审计)
+
+六架构峰位稳定性（104 图, bootstrap B=10⁴）：
+
+| 架构 | 峰 | margin | bootstrap argmax | per-image 同号率 | 峰型 |
+|------|-----|--------|------------------|------------------|------|
+| SD1.5 | U2.R0 (0.684) | 22.3% | 100% | — | 内层局域峰 |
+| H-DiT | blocks.20 (0.500) | 19.3% | 100% | — | 内层局域峰 |
+| FLUX | s2 (0.368) | 0.4% | 99.8% | 66.3% | 内层局域峰（s2/s3 竞争） |
+| SD3.5 | block_22 (0.917) | 25.4% | 100% | 104/104 vs b23 | 近末层已验证峰 |
+| SDXL | U2.R2 (0.964) | 6.9% | 100% | 96.2% | 末层删失峰† |
+| PixArt-Σ | T27 (0.964) | 30.8% | 100% | 100% | 末层删失峰† |
+
+†末层删失（right-censored）：漂移向输出端集中，但 hook 范围在末层截断，峰后回落不可观测。不是伪影（2×2 协议×图像集证明），是测量边界的结构事实。
+
+### 3.6 Protocol Audit (P-multi / P-t0 / P-tT)
+
+**发现**：论文历史数据混用了三种漂移测量协议——
+
+| 协议 | K | 参考 | 合规性 |
+|------|---|------|--------|
+| P-multi（多步均值, Definition 1 合规） | 相对规则 {前3,中3,后3}，逐调度器展开 | DDPM-forward 外部参考 | ✅ canonical |
+| P-t0（低噪端单步） | {t≈0 一步} | 反演末步 | 退化近似（K=1），信噪比低 |
+| P-tT（高噪端单步） | {t≈T 一步} | 反演首步 | 退化近似（K=1），Band 1 历史值 |
+
+估计量性质：P-t0 单步混入轨迹分叉的通用端点分量（所有架构都在输出端分叉），稀释架构特异信号——量化证据：三带间距 P-t0 下 1.2× vs P-multi 下 ~3×（占位，重算后落定）。
+
+**协议选择准则：跟随预先写下的 Definition 1 与估计量性质，不跟随结果。历史协议数据全部保留，写进稳健性附录。**
+
+**P-multi 重测状态**（104 图, coco_val100）：
+
+| 架构 | 状态 |
+|------|------|
+| SD1.5 | ✅ pp=0.684, conc=0.583, sp=0.588 |
+| SDXL | 运行中 |
+| H-DiT | 待重跑（OOM 后重启） |
+| FLUX | 待写脚本 |
+| SD3.5 | 待写脚本 |
+| PixArt-Σ | 待写脚本 |
+| Band 1 四变体 | 运行中 |
 
 ---
 
@@ -246,14 +289,24 @@ PixArt-Σ 与 HunyuanDiT 同属 "single-stream Transformer with cross-attention"
 
 ### 已完成
 
-C1 分量级不变性 (7 模型边界谱系) · C2 v2 跨架构矩阵 (6 架构 15 pair) · C3 结晶曲线 (eps+flow) · 随机 init · PixArt-Σ · MMDiT boundary · Skip 因果链 (SD1.5+SDXL) · 最近质心盲测 · TOST/BH/FDR · 度量审计
+C1 分量级不变性 (7 模型边界谱系) · C2 v2 跨架构矩阵 (6 架构 15 pair) · C3 结晶曲线 (eps+flow) · 随机 init · PixArt-Σ · MMDiT boundary · Skip 因果链 (SD1.5+SDXL) · 最近质心盲测 · TOST/BH/FDR · 度量审计 v1→v2 · 层序 canonical 化 (layer_order.py + 单元测试) · 协议审计 (P-multi/P-t0/P-tT 三协议发现) · SD3.5 104 图复核 (block_22 真峰, d=2.42, 104/104) · FLUX 自然排序修复 (peak=s2, joint→single 边界) · 六架构峰位稳定性诊断
+
+### 进行中（P-multi 全量重测）
+
+| 架构/变体 | 状态 |
+|-----------|------|
+| SD1.5 | ✅ pp=0.684 conc=0.583 sp=0.588 |
+| SDXL | tmux 运行中 (~82%) |
+| Band 1 (SD1.4/RV/LCM/RandText) | tmux 运行中 (RV 65%) |
+| H-DiT | OOM 中断，待 SDXL 完成后重跑 |
+| FLUX / SD3.5 / PixArt-Σ | 脚本待写 |
 
 ### 待补齐
 
-HunyuanDiT 组件拆分 (pos_embed 调试) · MI shuffle 基线 · PERMANOVA (数据已齐, 分析待做) · 写作
+P-multi 重测完成 → canonical 库冻结 → 15+4 对矩阵重算 → 双场景敏感性表 → 散点图 (删失标记) → Finding 2 封版 → HunyuanDiT 组件拆分 · MI shuffle 基线 · PERMANOVA · SDXL 谱系测试 · SD2.1/PixArt-α 扩展 (n=2→3) · VAE-swap 2×4 · 随机初始化重跑 (新口径 5 种子) · 写作
 
 ---
 
 ## 附录计划
 
-A. v2 度量审计 (peak_count artifact 发现与修复) · B. Bootstrap 噪声底分布 · C. 编辑 benchmark 逐类分布 · D. 预注册哈希承诺 · E. PixArt learned_sigma 验证
+A. 度量审计 v1→v2 (peak_count artifact 发现与修复) · A2. 层序审计 (字典序 bug, UNet topo key, canonical hash) · A3. 协议审计 (P-multi/P-t0/P-tT 历史登记表 + 协议选择准则) · A4. 峰型三分类与删失标注 (双场景矩阵敏感性) · B. Bootstrap 噪声底分布 · C. 编辑 benchmark 逐类分布 · D. 预注册哈希承诺 · E. PixArt learned_sigma 验证 · F. P-t0 协议稳健性对照 (带内排序跨协议一致 / 带隙协议依赖披露)
