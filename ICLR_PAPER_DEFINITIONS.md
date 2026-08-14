@@ -1,4 +1,4 @@
-# Architecture Fingerprint: 严格定义与贡献层次 (v3.5)
+# Architecture Fingerprint: 严格定义与贡献层次 (v3.6)
 
 > ICLR 2027 投稿用。
 > v2 → v3 核心修正：(1)"Fingerprint"明确定位为 measured profile 而非 intrinsic property；
@@ -53,6 +53,29 @@
 > D_pp 降级为带注释的辅助证据；(31)机制聚类假说正式否定（H-DiT–PixArt 同机制
 > D_mag=0.418）；(32)全量重测进行中：6 架构 + Band 1 四变体统一到 P-multi·104 图，
 > 完成前 Finding 2 全部数字保持占位状态。
+>
+> v3.5 → v3.6 (2026-08-14 P-multi 全量落定 + 法医包)：(33)P-multi@104 六架构
+> 全量完成（104 图 0 失败）；Band 1 四变体 D_pp 全 0、D_mag ∈ [0.005, 0.023]——
+> C1 承重墙在最严协议下成立；(34)法医包 F1–F5：P-multi 噪声底 bootstrap
+> （同模型 median 0.0014/p95 0.0042）、防污染核查（FLUX/PixArt 原始量级差
+> 37×，无 bug）、剖面形态检验、per-σ 分解、SD3.5 峰位移复核；(35)Finding 2
+> 重构为**形态二分**：内层局域型（SD1.5/SDXL/H-DiT）vs 末端累积型/斜坡
+> （FLUX/PixArt/SD3.5，Spearman(层序,剖面) ≥ +0.987）；二分不被教科书标签
+> 预测（斜坡类混合 MM-DiT 与 cross-attn DiT，内层峰类混合 UNet 与 cross-attn
+> DiT）；(36)斜坡架构 argmax 退化：单调斜坡峰恒落末层，pp 不含信息——不同
+> 形态类用不同坐标读取指纹（内层峰类读 pp，斜坡类读形状参数：尾部质量/凸度）；
+> (37)可分辨性极限：FLUX–PixArt D_mag=0.0011 < 噪声底——斜坡类内三特征空间
+> 统计不可区分，指纹分辨形态类不保证分辨类内实例（Limitations 主动声明）；
+> (38)负结果清单新增两条："D_mag 编码设计谱系"普遍主张死亡（MMDiT 对 0.306
+> 破裂；UNet 对 0.024 存活）、"谱系内变异远小于跨架构距离"比较级被证伪
+> （RandText 0.0232 > FLUX–PixArt 0.0011），重写为"谱系内 ≤0.023 远小于
+> 形态类间 ≈0.2–0.3"；(39)FLUX 峰位协议双面孔：P-tT 下 s2（边界，全 σ 弱信号
+> 0.13–0.17，Observation 级次峰）、P-multi 下 single_37（末端删失†）——§4.5
+> 改写，双协议对照表进附录；(40)SD3.5 在 P-multi 下峰移 block_23 末层
+> （104/104, t=138.4），P-t0 时代"回落 47%"证据注明协议范围；(41)形态类跨
+> 协议稳定性：SD1.5/H-DiT/PixArt 双协议一致，SDXL 翻转（P-t0 测量自身对样本
+> 量不稳定，margin 6.9%），FLUX P-t0 作废（轨迹相邻态比较）；(42)双场景敏感性
+> 表退役，替换为形态分类别坐标表 + 双协议对照表。
 
 ---
 
