@@ -75,6 +75,7 @@ _ARCH_KEY = {
     "SD3.5":       natural_key,       # block_N
     "PixArt":      natural_key,       # block_N
     "PixArt-Sigma": natural_key,      # alias
+    "PixArt-alpha": natural_key,      # alias
     "FLUX":        natural_key,       # jN / sN
 }
 
