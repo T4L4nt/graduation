@@ -77,6 +77,14 @@
 > 量不稳定，margin 6.9%），FLUX P-t0 作废（轨迹相邻态比较）；(42)双场景敏感性
 > 表退役，替换为形态分类别坐标表 + 双协议对照表。
 >
+> v3.6 补充3 (2026-08-16 主张 2 闭环 + Finding 3 协议审计)：(49)随机初始化 P-multi
+> 重跑（5 种子）：全部种子 pp=0.0263（down_blocks.0.resnets.1，输入端），与训练后
+> pp=0.684 对照 D_pp=0.658——"拓扑定义空间、训练选择实例"的干预证据过 P-multi 门槛；
+> (50)DiT-S/2 结晶曲线 P-multi 审计（eps 10k/50k + flow 10k-50k 可用）：eps 峰位
+> 10k 即锁 block 11（pp=0.9167），flow 从 block 9(10k)→block 7(20k)→block 11(30k
+> 起稳定)——Finding 3 峰位范式不变性在 P-multi 下成立；eps 20k/30k/40k checkpoint
+> 已删，P-t0 值保留为历史（scope limitation）。
+>
 > v3.6 补充2 (2026-08-16 SDXL-Turbo 内层峰类谱系测试)：(47)SDXL-Turbo P-multi@104
 > 完成（104 图 0 失败；pp=0.4286 mid_block.resnets.1，conc=0.5692，sp=0.5711）——
 > 与 SDXL base 的 D_pp=0.000、D_mag=0.0022（噪声底 p95 0.0042 之内，统计不可区分）：

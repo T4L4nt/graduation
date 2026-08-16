@@ -176,7 +176,9 @@ SD1.4(0.011) < LCM(0.021) < RandText(0.034) < RV(0.043) ‖ inter-arch(0.092) �
 
 - DiT-S/2 eps vs flow 对照（Intervention）：峰位同归 block 11，浓度差 0.011
 - 指纹收敛曲线（crystallization，Observation）：eps 在 10k 步锁定峰位，flow 在 30k 步锁定。最终稳态一致，收敛速度范式依赖
+- **P-multi 审计（v3.6）**：eps 10k 即锁 block 11（pp=0.9167）；flow 从 block 9(10k)→block 7(20k)→block 11(30k 起稳定)——峰位范式不变性在 P-multi 下成立；eps 20k/30k/40k checkpoint 已删（scope limitation，P-t0 值保留为历史）
 - 采样器 swap（Intervention）：确定性 ODE（DPM++, Euler, Euler a）保持峰位；随机 DDIM (η=1) 移位
+- **随机初始化 P-multi 重跑（5 种子）**：全部种子 pp=0.0263（输入端）vs 训练后 0.684（decoder），D_pp=0.658——"拓扑定义空间、训练选择实例"的干预证据过 P-multi 门槛
 
 ### 3.5 Peak Stability Diagnostics (v3 审计)
 
