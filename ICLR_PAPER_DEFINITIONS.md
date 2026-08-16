@@ -46,7 +46,7 @@
 > （attentions 排在 resnets 前）与字典序 bug（block_10 排在 block_2 前），建立
 > `layer_order.py` 共享模块 + 单元测试 + layer_list_hash 审计字段；(28)峰型三分类：
 > 内层局域峰 / 近末层已验证峰（SD3.5 block_22，104 图复核 d=2.42、104/104 一致）/
-> 末层删失峰†（SDXL、PixArt-Σ 0.964，hook 边界截断）——删失峰对的 D_pp 需双场景
+> 末端 right-censored 峰†（SDXL、PixArt-Σ 0.964，hook 边界截断）——删失峰对的 D_pp 需双场景
 > 敏感性表注释；(29)FLUX 峰位修正：自然排序修复后 peak=s2（joint→single 边界带
 > 第 3 块），"跨模态边界"叙事从次峰升级为全局峰；(30)Finding 2 重构：分量分层——
 > 峰位编码实例身份，度量分量编码谱系身份；D_mag 为主轴（免疫删失与协议选择），
