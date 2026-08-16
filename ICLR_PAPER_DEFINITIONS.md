@@ -508,6 +508,17 @@ where K is a fixed set of sampled timesteps, f_l(·, t) is the output feature
 of layer l at denoising step t (spatial-mean-pooled for attention layers,
 raw output for ResNet layers).
 
+**Reference convention (v3.6 clarification).** The notation f_l^inv(x, t)
+denotes the backbone's features at step t along the *reference trajectory*,
+which the canonical P-multi protocol implements as the forward-noised latent
+z_ref = √ᾱ_t·x_0 + √(1−ᾱ_t)·ε at matched timestep (DDPM forward marginal;
+flow-matching models use the corresponding rectified-flow interpolation),
+rather than the inversion trajectory itself. This external-reference choice
+avoids the degenerate comparison of adjacent states along a single trajectory
+that historically produced the P-tT artifact (see PROTOCOL_MANIFEST.md).
+f_l^recon(x, t) denotes features along the reconstruction trajectory at the
+matched timestep.
+
 ### Definition 2 (Architecture Fingerprint)
 
 The Architecture Fingerprint of M under inversion protocol P is the **measured
@@ -518,8 +529,9 @@ layer-wise drift profile**:
 ```
 
 We refer to Φ(M) as a **fingerprint** in the measurement sense: a reproducible
-profile that distinguishes architectures under a fixed protocol—not as a claim
-of invariance across all conditions.
+profile that discriminates architectures at the granularity the measurement
+supports—morphology class reliably, within-class instances conditionally
+(Finding 2)—not as a claim of invariance across all conditions.
 
 **Explicit dependencies** (declared, not hidden):
 
@@ -550,10 +562,23 @@ a statistical threshold (layers where Φ_l > μ + 2σ, Appendix E); structural
 distance rankings between architecture pairs are stable across both definitions
 (Spearman ρ > 0.98 on the 10-pair ordering).
 
+**Degeneration for monotonic-ramp profiles (v3.6).** Both peak definitions
+assume a peak-shaped profile. For architectures whose normalized drift profile
+is a monotonic ramp (Spearman rank correlation between layer order and drift
+≥ 0.95; FLUX, PixArt-Σ, SD3.5 under P-multi), l_peak is always the last hooked
+layer and the peak region covers the entire tail — the peak coordinate carries
+no instance information. For these architectures the informative coordinates
+are the profile shape parameters (concentration, spread); see Finding 2.
+
 **Prediction (falsifiable hypothesis).** The measured drift peak l_peak(M)
-should coincide with the architecture's independently identifiable information
-bottleneck, as determined from (a) information flow graph, (b) skip/residual
-structure, and (c) cross-modal interaction boundaries (§3.4, Table 1):
+should coincide with the architecture's independently identifiable functional
+bottleneck — the structural locus where inversion-reconstruction information
+conflict concentrates — as determined from (a) the forward-pass computation
+graph, (b) skip/residual structure, and (c) cross-modal interaction boundaries
+(§3.4, Table 1). We deliberately avoid the term "information bottleneck" in
+the sense of Tishby et al. (2000): we make no claim about mutual-information
+compression in the rate–distortion sense; our usage refers only to the
+localization of feature drift, which we term **functional bottleneck**.
 
 | Backbone family | Independently predicted bottleneck | Prediction window |
 |----------------|-------------------------------------|-------------------|
@@ -565,40 +590,51 @@ The prediction window size relative to total layers (k/L) provides a
 chance-level baseline: if the prediction window covers a fraction k/L of all
 layers, l_peak falls within it with probability k/L under random placement.
 
-**Peak type classification (v3.5, §3.5 of outline):** peaks fall into three
-types with distinct evidential status—
+**Peak-type classification (v3.5) — superseded by the v3.6 morphology
+dichotomy under P-multi.** The v3.5 classification (interior localized /
+verified near-terminal / terminal censored) was derived under the P-t0
+protocol. Under the canonical P-multi protocol, architecture membership
+shifted: SDXL moved from terminal-censored to interior (0.429), FLUX from
+interior to terminal-ramp (0.983), SD3.5 from verified near-terminal to
+terminal (block_23). The v3.6 classification replaces it:
 
-1. **Interior localized peak**: maximum strictly inside the hooked range
-   (SD1.5 0.684, H-DiT 0.500, FLUX 0.368), full peak shape observable;
-2. **Verified near-terminal peak**: maximum near the end with observed
-   post-peak falloff (SD3.5 block_22 with block_23 −47%, 104/104 images,
-   paired t=36.9, Cohen's d=2.42);
-3. **Terminal censored peak†**: maximum at the last hooked layer, post-peak
-   falloff unobservable (SDXL, PixArt-Σ at 0.964). Not an artifact—stable
-   under protocol×image-set 2×2 (96.2% per-image agreement for SDXL)—but a
-   right-censored measurement: D_pp values involving censored peaks require
-   dual-scenario sensitivity annotation (as-measured vs strongest interior
-   candidate, Appendix A4).
+1. **Interior-localized class**: non-monotonic profile, peak strictly inside
+   the hooked range, peak position carries instance identity (SD1.5 0.684,
+   SDXL 0.429, H-DiT 0.500);
+2. **Terminal-accumulation class (monotonic ramp)**: profile monotonically
+   increases with depth (Spearman ≥ 0.95), peak always at the last hooked
+   layer — a right-censored measurement (survival-analysis sense: post-peak
+   falloff unobservable), and the peak coordinate is degenerate (FLUX 0.983,
+   PixArt-Σ 0.964, SD3.5 0.958). Shape parameters (concentration, spread)
+   are the informative coordinates; within-class instance discrimination is
+   not guaranteed (Finding 2, resolvability limit).
 
-**Bottleneck-window prediction refinement (v3.5):** the prediction window
+**Bottleneck-window prediction refinement (v3.6):** the prediction window
 must be defined per-instance from structural facts, not per-category priors.
-FLUX's peak at s2 (joint→single boundary region, not the boundary block
-itself) and SD3.5's peak at block_22 (no structural boundary in uniform
-MMDiT, bottleneck near output) show that the peak tracks the *instance's
-actual structural boundary*, and the boundary window table in §4.1 is
-re-derived per architecture (Appendix: per-architecture windows +
-structural justification).
-Across the 5 architectures, mean k/L ≈ 0.20 (range: 0.17–0.25), giving a
-binomial probability of 5/5 containment under random placement of
-p ≈ 3×10⁻⁴.
+Under P-tT, FLUX's peak lay at s2 (joint→single boundary region, not the
+boundary block itself); under P-multi its drift concentrates at the terminal
+end (single_37). SD3.5's P-t0 peak at block_22 (no structural boundary in
+uniform MMDiT, bottleneck near output) shifts to block_23 under P-multi.
+These protocol-dependent presentations show that the peak tracks the
+*instance's actual structural organization*, and the boundary window table
+in §4.1 is re-derived per architecture and per protocol (Appendix:
+per-architecture windows + structural justification). The 5-architecture
+5/5 containment claim (p ≈ 3×10⁻⁴, mean k/L ≈ 0.20) from v3.5 is retained
+for the P-t0-era data only and is not restated under P-multi; the terminal
+accumulation class is excluded from bottleneck-window prediction because
+its peak coordinate is degenerate.
 
-**Validation.** For all 5 architectures, the measured l_peak falls within the
-independently predicted bottleneck region. On SD 1.5, the measured peak
-(decoder junction, up_blocks.2) is exactly the skip connection targeted by
-the causal intervention (Cut A, §5) — whose removal eliminates 27.7% of drift
-and improves reconstruction by +2.20 dB PSNR. This provides independent
+**Validation.** For the three interior-localized architectures (SD1.5, SDXL,
+H-DiT), the measured l_peak falls within the independently predicted
+bottleneck region. On SD 1.5, the measured peak (decoder junction,
+up_blocks.2) is exactly the skip connection targeted by the causal
+intervention (Cut A, §5) — whose removal eliminates 27.7% of drift and
+improves reconstruction by +2.20 dB PSNR. This provides independent
 mechanistic validation: the peak layer is not a post-hoc selection but the
 specific structural component whose causal role the framework predicts.
+The terminal-accumulation class (FLUX, PixArt-Σ, SD3.5) is exempt from
+bottleneck-window validation because its peak coordinate is degenerate;
+its validation rests on the morphology-dichotomy evidence (Finding 2).
 
 **Alternative definition: statistical threshold (Appendix E).** As a
 sensitivity check, we also define peaks using a purely statistical criterion:
@@ -618,10 +654,11 @@ but still identifies molecular structure.
 
 **Why "Fingerprint"?** We use this term because (a) Φ(M) is reproducible for
 the same M under fixed P (Property 1), (b) different M produce measurably
-different Φ (Property 2), and (c) the profile shape is interpretable from
-the architecture's topology (§4). As defined, Φ(M) is a measured profile
-under a fixed protocol—analogous to an NMR spectrum that depends on solvent
-and temperature but still identifies molecular structure.
+different Φ at the morphology-class level, with within-class discrimination
+conditional on the resolvability limit (Finding 2), and (c) the profile shape
+is interpretable from the architecture's topology (§4). As defined, Φ(M) is
+a measured profile under a fixed protocol—analogous to an NMR spectrum that
+depends on solvent and temperature but still identifies molecular structure.
 
 ### Why Architecture Fingerprint rather than "layer-wise drift profile"?
 
