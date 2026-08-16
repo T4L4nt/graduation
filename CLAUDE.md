@@ -8,18 +8,26 @@ ICLR 2027 投稿：**Architecture Fingerprint of Feature Drift in Diffusion Inve
 
 **核心贡献**：发现扩散反演中的特征漂移具有由 backbone attention 拓扑决定的**分量级架构指纹**——拓扑分量（峰位）为跨扰动的不变量，度量分量（浓度/展宽/形状）呈条件依赖的弱变异。
 
-**当前证据状态**（v2 连续度量，peak_count 伪影已修复）：
+**当前证据状态**（P-multi@104 canonical，v3.6 形态二分框架）：
 
 | Claim | 状态 | 关键证据 |
 |-------|------|---------|
-| C1 分量级不变性 | ✅ | SD1.4(0.011)<LCM(0.021)<RandText(0.034)<RV(0.043)<inter(0.092) |
-| C2 按 attention 拓扑聚类 | ✅ | v2 矩阵：FLUX-SD3.5 0.092→DiT-FLUX 0.618 |
-| C3 峰位+浓度双不变 | ✅ | DiT-S/2 双目标对照，峰位收敛速度范式依赖 |
-| C4 实例可诊断 | ✅ | ρ(drift,Δ)=−0.59, SD1.5+2.2dB vs SDXL−11.6dB |
-| 统计 | ✅ | TOST≤0.2dB, BH/FDR 31/38, Cut A 三指标一致 |
-| 结晶曲线 | ✅ | eps(50k)+flow(50k)，峰位同归 block 11 |
+| C1 分量级不变性（内层峰类） | ✅ | Band1 四变体 D_pp 全 0，D_mag ∈ [0.005, 0.023]；SDXL-Turbo D_pp=0/D_mag=0.0022（噪声底内） |
+| C1 弱主张（斜坡类） | ✅ | 末层 argmax 稳定；形状参数实例级（PixArt-α vs Σ 0.096） |
+| Finding 2 形态二分 | ✅ | 内层局域×3（SD1.5/SDXL/H-DiT）vs 末端累积×3（FLUX/PixArt/SD3.5），Spearman ≥ +0.987 |
+| 可分辨性极限 | ✅ | FLUX–PixArt D_mag=0.0011 < 噪声底 p95 0.0042 |
+| C3 双目标对照 | ⚠️ P-t0 时代数据，P-multi 审计进行中 | DiT-S/2 eps/flow 峰位同归 block 11（P-t0 值） |
+| C4 实例可诊断 | ✅ | Cut A +2.2dB vs −11.6dB（干预，与协议无关） |
+| 统计 | ✅ | TOST≤0.2dB；ρ(drift,Δ)=−0.59 为历史值，存盘为 −0.395（待统一） |
 
-**剩余待补**：PixArt-Σ 下载 + PERMANOVA，MI shuffle 基线，HunyuanDiT 组件拆分，识别盲测。
+**形态二分（P-multi@104）**：
+
+| 类 | 成员 | pp | conc/sp |
+|----|------|------|---------|
+| 内层局域型 | SD1.5 / SDXL / H-DiT | 0.684 / 0.429 / 0.500 | ~0.57–0.61 |
+| 末端累积型 | FLUX / PixArt-Σ / SD3.5 | 0.983 / 0.964 / 0.958 | 斜坡，argmax 退化 |
+
+**剩余待补**：Finding 2 英文成稿 · Fig.2 重画 · 随机初始化 P-multi 重跑（5 种子，运行中）· DiT-S/2 结晶 P-multi 审计（运行中，eps 仅存 10k/50k）· PERMANOVA · MI shuffle 基线（预注册缺口，见审查报告）· HunyuanDiT 组件拆分 · weight_perturb v1-v3 按 v2 度量重做（peak_count 已废除）· phase8b FLUX 消融表重跑（空列表 bug 已修）
 
 ## 开发环境
 

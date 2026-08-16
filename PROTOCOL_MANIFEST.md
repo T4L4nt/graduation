@@ -83,8 +83,9 @@ per_image: {layer: {img: drift}}, profile: {layer: mean_drift}
 | Protocol ID | Description | K | Ref | Used in | Status |
 |-------------|-------------|---|-----|---------|--------|
 | P-multi | Multi-timestep mean, DDPM ref, 9 indices | {0,1,2,23,24,25,47,48,49} | external DDPM | Phase1 (SD1.5, SDXL, SD3.5) | **active canonical** |
-| P-t0 | Single-step at last timestep (t≈0) | {last step} | inversion last-step | unified_100img (all 6), SDXL phase1, SD3.5 phase1 | robustness appendix |
+| P-t0 | Single-step at last timestep (t≈0) | {last step} | inversion last-step | unified_100img (all 6), SD3.5 phase1 (t=0 reference) | robustness appendix |
 | P-tT | Single-step at first timestep (t≈T) | {t=timesteps[0]} | inversion first-step | p0b_*_fingerprint.py (RV, LCM, RandText, SD1.4) | deprecated |
+| P-xlevel | Cross-noise-level single-step (t≈961 vs t≈1) | {inversion-last vs recon-last, unmatched} | none (unmatched t) | sdxl_phase1_diagnostics.py, dit_phase1 (historical 19-image) | **invalid** (superseded by P-multi) |
 
 ### Known protocol divergence
 - P-multi vs P-t0: conc/sp differ by up to ~20% (SD1.5 0.583 vs 0.524)
@@ -99,15 +100,16 @@ per_image: {layer: {img: drift}}, profile: {layer: mean_drift}
 - Canonical order: `unet_topo_key` (resnets before attentions in down/up blocks; attn before resnets in mid)
 - Hook targets identical to phase1_diagnostics.py
 
-### DiT (H-DiT, PixArt-Σ)
+### DiT (H-DiT, PixArt-Σ, PixArt-α)
 - Canonical order: `natural_key` on block index
-- Reference: clean latent forward at t=0 (P-multi adaptation for architecture without noise-level UNet)
-- K = {t=0} (single-step) — adaptation documented
-- hook: transformer block output (raw hidden_states for single-stream, image hidden_states [output[1]] for MMDiT)
+- Reference: DDPM-forward noise z_ref = √ᾱ·x₀ + √(1−ᾱ)·ε at matched t (DDIM schedulers)
+- K = 9 indices per relative rule (same as UNet)
+- hook: transformer block output (raw hidden_states)
 
 ### MMDiT (FLUX, SD3.5)
 - Canonical order: `natural_key`
 - hook: image hidden_states = output[1] of JointTransformerBlock
-- Euler scheduler (sigma-based), not DDIM
-- Reference: clean latent forward at t=0
-- K = {t=0} (single-step adaptation)
+- Euler scheduler (sigma-based); transformer conditioning = sigmas ∈ [0,1] (NOT scheduler.timesteps 1000-scale)
+- Reference: rectified-flow interpolation z_ref = (1−σ)·z₀ + σ·ε at matched σ
+- K = 9 indices per relative rule (same as UNet)
+- FLUX: guidance=1.0; dynamic-shift mu from pipeline config

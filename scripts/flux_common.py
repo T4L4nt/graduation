@@ -597,8 +597,10 @@ class FluxFeatureCorrector:
         self.transformer = transformer
         self.lam_hidden = lam_hidden
         self.lam_encoder = lam_encoder
-        self.joint_indices = joint_indices or list(range(N_JOINT_BLOCKS))
-        self.single_indices = single_indices or list(range(N_SINGLE_BLOCKS))
+        self.joint_indices = (list(range(N_JOINT_BLOCKS)) if joint_indices is None
+                               else list(joint_indices))
+        self.single_indices = (list(range(N_SINGLE_BLOCKS)) if single_indices is None
+                               else list(single_indices))
         self.reference: dict[str, dict[str, torch.Tensor]] = {}
         self._handles = []
 
