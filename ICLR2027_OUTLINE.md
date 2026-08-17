@@ -251,7 +251,8 @@ SD1.4(0.011) < LCM(0.021) < RandText(0.034) < RV(0.043) ‖ inter-arch(0.092) �
 | Fingerprint | Peak at decoder | Peak at mid_block |
 | Role | Conflict source | Information pathway |
 
-> 证据层级：Observation（两个数据点）。措辞："同一结构组件在不同 UNet 变体中扮演不同功能角色——Fingerprint 是实例级诊断工具。"
+> 证据层级：Observation（两个数据点）。措辞："同一结构组件在不同 UNet 变体中扮演不同功能角色——Fingerprint 是实例级诊断工具。
+> **#9 披露句（冻结）**：SDXL 对照在较少数步（30 vs. 50）与生成图（20 张）下进行，切点取同名结构组件而非其全局峰层；跨架构比较因此仅限**符号层面**（same structural component, opposite functional role），不做量级对比。"
 
 ### 4.4 Why Fine-Tuning Doesn't Alter the Fingerprint: Functional Subspace Misalignment
 

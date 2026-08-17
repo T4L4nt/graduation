@@ -744,6 +744,33 @@ no measured phenomenon to explain.
 
 ---
 
+## 2e. 摘要末句 + 主张 4 末句冻结（2026-08-17，#6 结案解锁）
+
+> **措辞修正说明**：预置稿中"attention-control editing"按 #6 结案判定改为
+> "attention-replay baseline"——实现是 cross-attention 输出回放（同空 prompt），
+> 非 Hertz 式编辑；沿用 editing 措辞会重开 #6 已关闭的保真度攻击面。
+
+摘要末句（冻结英文）：
+
+```
+Mechanistically, drift originates from a localized cross-level skip-pathway
+conflict between the two trajectories; a closed-form, diagnosis-guided
+correction brings inversion fidelity to within 0.2 dB of a per-step
+attention-replay baseline (TOST-equivalent) while, unlike optimization-based
+inversion methods, requiring no per-image optimization.
+```
+
+主张 4 末句（冻结中文）：
+
+```
+它将反演保真度提升至与注意力回放基线相差 0.2 dB 以内（TOST 等价）；
+与基于优化的反演方法不同，该修正项为闭式，无需逐图优化。
+```
+
+三个卫生项状态确认：d_z 标注 ✓（cc75bc8）、SSIM/LPIPS paired+TOST ✓（cc75bc8）、
+app:noise-a 机械性膨胀核对 ✓（cc75bc8，c=1.71，均值层面）。
+
+---
 ## 2d. #9/#11/#16 结案：协议不对称披露 + 多重比较校正全景（2026-08-17）
 
 ### #9 判定（SDXL 干预协议不对称：三项全部确认，一项为有意设计）
