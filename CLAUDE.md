@@ -18,7 +18,7 @@ ICLR 2027 投稿：**Architecture Fingerprint of Feature Drift in Diffusion Inve
 | 可分辨性极限 | ✅ | FLUX–PixArt D_mag=0.0011 < 噪声底 p95 0.0042 |
 | C3 双目标对照 | ⚠️ P-t0 时代数据，P-multi 审计进行中 | DiT-S/2 eps/flow 峰位同归 block 11（P-t0 值） |
 | C4 实例可诊断 | ✅ | Cut A +2.2dB vs −11.6dB（干预，与协议无关） |
-| 统计 | ✅ | TOST≤0.2dB；ρ(drift,Δ)=−0.59 为历史值，存盘为 −0.395（待统一） |
+| 统计 | ✅ | TOST≤0.2dB；ρ(drift,Δ)=−0.395 为历史值，存盘为 −0.395（待统一） |
 
 **形态二分（P-multi@104）**：
 

@@ -241,7 +241,7 @@ SD1.4(0.011) < LCM(0.021) < RandText(0.034) < RV(0.043) ‖ inter-arch(0.092) �
 | Cut B (α=0, low-drift skip) | 无显著变化 | Intervention |
 | Noise A (replace skip with noise) | L2↑ but PSNR↑ | Intervention |
 | Dose α∈[0,1] | monotonic loss | Intervention |
-| ρ(drift, Cut A Δdrift) = −0.59 | peak layer = peak response | Correlation |
+| ρ(drift, Cut A Δdrift) = −0.395 | peak layer = peak response | Correlation |
 
 ### 4.3 Cross-Architecture Contrast: Same Component, Opposite Role
 
