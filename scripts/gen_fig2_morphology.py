@@ -104,8 +104,8 @@ for i in range(n):
         axB.text(j, i, txt, ha="center", va="center", fontsize=8,
                  color="white" if val > 0.3 else "black")
 
-# Ramp block label
-axB.text(n-0.5, ni-0.45, "D$_{mag}$\n(D$_{pp}$ degenerate)",
+# Ramp block label (outside the matrix, below the x-axis class label)
+axB.text(n-0.5, -2.1, "ramp block: D$_{mag}$ (D$_{pp}$ degenerate)",
          ha="right", va="top", fontsize=7.5, color="#08306b")
 
 cbar = fig.colorbar(im, ax=axB, fraction=0.046, pad=0.04)
