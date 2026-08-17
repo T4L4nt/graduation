@@ -129,7 +129,7 @@ P-multi 噪声底（同模型 bootstrap, B=1000）：median=0.0014, p95=0.0042�
 | RandText (编码器替换) | 0.034 | 0.000 | Intervention |
 | RV (全量微调) | 0.043 | 0.000 | Observation |
 
-- v4 高斯扰动剂量曲线（Intervention）：ε ≤ 1e-4 D_total < 噪声底，D_pp 全程 0.000
+- v4 高斯扰动剂量曲线（Intervention）：ε ≤ 1e-4 D_s < 噪声底，D_pp 全程 0.000
 - ΔW 测量：真实 checkpoint ΔW (0.14–0.21) 超出高斯稳定区三个数量级——L2 权重量级不预测指纹距离
 - **P-multi 重测结果**：四变体 D_pp 全 0，D_mag ∈ [0.005, 0.023]——C1 核心证据在最严协议下成立
 - **内层峰类第二谱系（SDXL-Turbo, P-multi@104）**：蒸馏 checkpoint 与 SDXL base 的 D_pp=0.000、D_mag=0.0022（噪声底 p95 0.0042 之内，统计不可区分）——内层峰类 n=2 谱系证据完备

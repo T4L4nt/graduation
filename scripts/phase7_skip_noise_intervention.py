@@ -78,7 +78,7 @@ class NoiseIntervention:
                     # its per-tensor mean and std, preserving statistical
                     # properties but destroying spatial/feature structure
                     noisy = tuple(
-                        torch.randn_like(t) * t.std() + t.mean()
+                        (torch.randn_like(t) * t.std() + t.mean()).to(t.dtype)
                         for t in res_hidden_states_tuple
                     )
                     return orig_fn(hidden_states, noisy, *args, **kwargs)

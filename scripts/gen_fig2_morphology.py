@@ -3,7 +3,7 @@ Fig.2 — Two drift morphologies and the resolution limits of the fingerprint.
 Panel A: normalized drift profiles of 7 architectures, colored by class.
 Panel B: morphology-aware distance heatmap (21 pairs, class-clustered).
   - Ramp-class block shows D_mag (D_pp is degenerate by construction).
-  - Other cells show D_total = sqrt(D_pp^2 + D_mag^2).
+  - Other cells show D_s = sqrt(D_pp^2 + D_mag^2).
 """
 import json, numpy as np
 import matplotlib
@@ -82,7 +82,7 @@ for i, na in enumerate(order):
 im = axB.imshow(D, cmap="YlOrRd", vmin=0, vmax=0.6)
 axB.set_xticks(range(n)); axB.set_xticklabels(order, rotation=45, ha="right", fontsize=9)
 axB.set_yticks(range(n)); axB.set_yticklabels(order, fontsize=9)
-axB.set_title("(B) Morphology-aware distance matrix", fontsize=12, fontweight="bold")
+axB.set_title("(B) Morphology-aware distance matrix (D$_s$)", fontsize=12, fontweight="bold")
 
 # Class separator lines (no boxes)
 axB.axhline(y=ni-0.5, color="black", lw=1.5)
@@ -109,14 +109,14 @@ axB.text(n-0.5, ni-0.45, "D$_{mag}$\n(D$_{pp}$ degenerate)",
          ha="right", va="top", fontsize=7.5, color="#08306b")
 
 cbar = fig.colorbar(im, ax=axB, fraction=0.046, pad=0.04)
-cbar.set_label("D$_{total}$", fontsize=11)
+cbar.set_label("D$_s$", fontsize=11)
 
 fig.text(0.5, 0.015,
          "Figure 2. (A) Normalized drift profiles under P-multi (104 images each), ordered by morphology class, then by peak position. "
          "Class membership is assigned from profile morphology (peak position and monotonicity), not from a distance threshold. "
          "† = terminal-censored: the peak lies on the last hooked layer, so post-peak falloff is unverifiable. "
          "(B) Structural distance between all 21 pairs. Within the terminal-accumulating block (lower right), cells report D$_{mag}$ at three decimals, "
-         "because D$_{pp}$ is degenerate there by construction; all other cells report D$_{total}$ = √(D$_{pp}$² + D$_{mag}$²).",
+         "because D$_{pp}$ is degenerate there by construction; all other cells report D$_s$ = √(D$_{pp}$² + D$_{mag}$²).",
          fontsize=8.5, ha="center", wrap=True)
 
 plt.tight_layout(rect=[0, 0.045, 1, 1])

@@ -67,7 +67,7 @@ ICLR 2027 投稿：**Architecture Fingerprint of Feature Drift in Diffusion Inve
 - D_pp = |peak_position_a − peak_position_b|
 - D_shape = 1 − Spearman ρ(profile_a, profile_b)
 - D_mag = L2(concentration, spread)
-- D_total = sqrt(D_pp² + D_shape² + D_mag²)
+- D_s = sqrt(D_pp² + D_mag²)
 
 噪声底（B=100 bootstrap）：median=0.0071, p95=0.0163
 
