@@ -744,6 +744,43 @@ no measured phenomenon to explain.
 
 ---
 
+## 2c. #6/#7 深挖结案：P2P 基线重命名 + 编辑场景双轴报告（2026-08-17）
+
+### #6 判定（三问）
+
+1. **oracle 不对称：代码层成立、结果层为零。** P2P λ=0.7 固定 = 25.33 dB，
+   oracle（每图最优 λ）= 25.34 dB，增益 +0.01 dB——λ=0.7 在几乎每张图上
+   都是最优，oracle 选择没有实际影响。正文按 fixed-λ 口径报告（25.33 vs
+   25.20，TOST 结果不变）。
+2. **P2P 实现不忠实：成立，但方向是"命名错误"而非"数字错误"。** 实现是
+   cross-attention 输出回放（f_out=(1−λ)·f_cur+λ·f_saved），全程空 prompt——
+   不是 Hertz et al. 的 prompt-change editing。25.34 dB 不能按 Hertz 口径
+   引用。**基线重命名为 attention-replay baseline（注意力回放基线）**：
+   它是逐步、逐层的特征级注入（比一次性校正更强的基线），我们的校正仍
+   达到 TOST 等价——主张反而更强。
+3. **TOST 等价性主张：复现成立。** 从存盘 per-image 数据重算：diff=+0.131 dB，
+   TOST Δ=0.2 dB 的 p1=0.0327 / p2<0.0001 → 等价。标准配对 t 拒绝严格相等
+   （t=3.74, p=0.0015）——这正是 TOST 的正确使用场景（统计显著但实际可忽略）。
+
+### #7 判定（编辑场景）
+
+- 编辑 benchmark 已在 v3.4 收缩为"内容锚定（content anchor）"框架，主张不
+  依赖编辑强度；审计引用的 CLIPDir≈0 与"校正后图像接近源图"一致（phase7
+  ours LPIPS 0.47 vs baseline 0.95）——**内容锚定正是在起作用**。
+- 缺的是**双轴报告**：内容保持（LPIPS −85%）与编辑强度（CLIPDir）必须同
+  图同表报告 trade-off。校正强度 λ 是显式旋钮，双轴曲线 = 内容锚定的完整
+  画像。
+
+### 摘要末句 + 主张 4 末句重写（两半句版）
+
+- 保真度半句（对 attention-replay 基线）："a diagnosis-guided one-shot
+  correction brings inversion fidelity within 0.2 dB (TOST) of a per-step
+  attention-replay baseline"
+- 成本半句（对 NTI/EDICT 类逐图优化）："without the per-image optimization
+  required by null-text methods"（NTI 在空 prompt 设置下 19.60 dB，退化且
+  更贵；成本优势真实，质量优势按设置如实陈述）
+
+---
 ## 2b. 冻结文本：主张 4 v3 与 §4.2 升级（2026-08-16，Noise A 深挖结案后）
 
 ### 主张 4 v3（双重分离回填——位置 + 内容两轴）
