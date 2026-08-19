@@ -112,7 +112,7 @@ cbar = fig.colorbar(im, ax=axB, fraction=0.046, pad=0.04)
 cbar.set_label("D$_s$", fontsize=11)
 
 fig.text(0.5, 0.015,
-         "Figure 2. (A) Normalized drift profiles under P-multi (104 images each), ordered by morphology class, then by peak position. "
+         "Figure 3. (A) Normalized drift profiles under P-multi (104 images each), ordered by morphology class, then by peak position. "
          "Class membership is assigned from profile morphology (peak position and monotonicity), not from a distance threshold. "
          "† = terminal-censored: the peak lies on the last hooked layer, so post-peak falloff is unverifiable. "
          "(B) Structural distance between all 21 pairs. Within the terminal-accumulating block (lower right), cells report D$_{mag}$ at three decimals, "

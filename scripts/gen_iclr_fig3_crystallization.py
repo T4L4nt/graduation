@@ -68,7 +68,7 @@ ax2.set_title("Peak position crystallization", fontweight="bold")
 ax2.legend(fontsize=9, framealpha=0.8); ax2.grid(True, alpha=0.2)
 ax2.set_xlim(5000, 55000); ax2.set_ylim(0.88, 0.93)
 
-fig.suptitle("Fig. 3: DiT-S/2 Training Crystallization — eps vs flow matching", fontweight="bold")
+fig.suptitle("Fig. 4: DiT-S/2 Training Crystallization — eps vs flow matching", fontweight="bold")
 plt.tight_layout()
 fp = OUT_DIR / "fig3_crystallization.pdf"
 plt.savefig(fp, dpi=200, bbox_inches="tight", facecolor="white")

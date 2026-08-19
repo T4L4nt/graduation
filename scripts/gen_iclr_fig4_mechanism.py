@@ -124,7 +124,7 @@ ax_c.grid(axis="y", alpha=0.2)
 j17_im = im_dict.get("joint_17", 1)
 j18_im = im_dict.get("joint_18", 1)
 ratio_im = j18_im / j17_im if j17_im > 0 else 1
-ax_c.text(0.95, 0.95, f"image: {ratio_im:.1f}x\ntext: 3.0x",
+ax_c.text(0.95, 0.95, f"image: {ratio_im:.2f}×\ntext: 3.0×",
           transform=ax_c.transAxes, ha="right", va="top", fontsize=9,
           bbox=dict(boxstyle="round", facecolor="lightyellow", alpha=0.8))
 
@@ -151,11 +151,11 @@ for i, (rho, p, c) in enumerate(zip(rho_vals, p_vals, colors)):
     sig = "*" if p < 0.05 else " (n.s.)"
     ax_d.text(rho + 0.02, i, f"ρ={rho:.3f}{sig}", va="center", fontsize=8, color=c)
 
-ax_d.annotate("cross-attention layers:\nρ≈0 (drift & ΔW independent)",
-              xy=(0.05, 2), fontsize=9, color="#aaa",
+ax_d.annotate("up/attn: 0.053 (n.s.) — nearly orthogonal\ndown/attn: 0.303* — partial overlap",
+              xy=(0.05, 2), fontsize=9, color="#555",
               bbox=dict(boxstyle="round", facecolor="lightyellow", alpha=0.6))
 
-fig.suptitle("Fig. 4: Mechanism — Architectures Localize Information Conflict Differently",
+fig.suptitle("Fig. 5: Mechanism — Architectures Localize Information Conflict Differently",
              fontsize=14, fontweight="bold", y=1.01)
 plt.tight_layout()
 figpath = OUT_DIR / "fig4_mechanism.pdf"

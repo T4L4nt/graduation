@@ -582,7 +582,7 @@ def fig5_application():
 
     # Position sensitivity annotation on right side
     for i, (v, pt) in enumerate(zip(delta_psnr, pos_types)):
-        ax_b.text(v + 0.3, i, f"+{v:.1f} dB", fontsize=9, va="center",
+        ax_b.text(v + 0.3, i, f"+{v:.2f} dB", fontsize=9, va="center",
                   fontweight="bold", color=C_DARK)
         ax_b.text(max(delta_psnr) + 1.5, i, pt, fontsize=7.5, va="center",
                   color="gray", style="italic")
@@ -658,7 +658,7 @@ def fig5_application():
                   va="center", transform=ax_c.transAxes, fontsize=11, color="gray")
         ax_c.axis("off")
 
-    fig.suptitle("Figure 5: Diagnosis-guided Correction — Simple because Diagnosis is Sufficient",
+    fig.suptitle("Figure 6: Diagnosis-guided Correction — Simple because Diagnosis is Sufficient",
                  fontsize=14, fontweight="bold", color=C_DARK, y=1.02)
     fig.savefig(OUT_DIR / "fig5_application.pdf", dpi=300, bbox_inches="tight")
     fig.savefig(OUT_DIR / "fig5_application.png", dpi=300, bbox_inches="tight")
